@@ -1,0 +1,21 @@
+version: "3.8"
+
+services:
+  escal8-ctf:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: escal8/ctf-platform:latest
+    container_name: escal8-ctf-portal
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    restart: always
+    volumes:
+      - ctf-data:/app/data
+
+volumes:
+  ctf-data:
+    driver: local

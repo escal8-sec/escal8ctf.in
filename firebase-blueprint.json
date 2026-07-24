@@ -1,0 +1,44 @@
+{
+  "entities": {
+    "challenges": {
+      "title": "Challenges",
+      "description": "CTF challenge problems",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "difficulty": { "type": "string" },
+        "points": { "type": "number" },
+        "description": { "type": "string" },
+        "flag": { "type": "string" },
+        "hints": { "type": "array" },
+        "solvedCount": { "type": "number" },
+        "author": { "type": "string" }
+      }
+    },
+    "submissions": {
+      "title": "Submissions",
+      "description": "User flag submissions",
+      "properties": {
+        "id": { "type": "string" },
+        "challengeId": { "type": "string" },
+        "username": { "type": "string" },
+        "teamName": { "type": "string" },
+        "flag": { "type": "string" },
+        "isCorrect": { "type": "boolean" },
+        "pointsAwarded": { "type": "number" },
+        "timestamp": { "type": "string" }
+      }
+    },
+    "users": {
+      "title": "Users",
+      "description": "User accounts",
+      "properties": {
+        "username": { "type": "string" },
+        "passwordHash": { "type": "string" },
+        "isAdmin": { "type": "boolean" },
+        "teamName": { "type": "string" }
+      }
+    }
+  }
+}

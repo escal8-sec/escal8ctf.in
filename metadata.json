@@ -1,0 +1,6 @@
+{
+  "name": "ESCAL8 CTF Platform",
+  "description": "A high-concurrency, responsive Capture The Flag (CTF) cybersecurity challenge application for the ESCAL8 community, featuring multi-category interactive challenges, safe flag verification, a live leaderboard, and an admin panel.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
