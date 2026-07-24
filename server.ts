@@ -794,6 +794,16 @@ interface UnlockedHintRecord {
   cost: number;
 }
 
+interface PublicChatMessageRecord {
+  id: string;
+  sender: string;
+  teamName: string;
+  message: string;
+  timestamp: string;
+  isAdmin?: boolean;
+  isPinned?: boolean;
+}
+
 interface SavedState {
   challenges: Challenge[];
   submissions: Submission[];
@@ -802,6 +812,7 @@ interface SavedState {
   teamStatuses?: TeamStatusRecord[];
   supportTickets?: SupportTicketRecord[];
   unlockedHints?: UnlockedHintRecord[];
+  publicChatMessages?: PublicChatMessageRecord[];
 }
 
 // Memory database with file sync fallback
@@ -816,7 +827,8 @@ let db: SavedState = {
   },
   teamStatuses: [],
   supportTickets: [],
-  unlockedHints: []
+  unlockedHints: [],
+  publicChatMessages: []
 };
 
 // Safe file write & read
@@ -2938,6 +2950,61 @@ app.post("/api/support/message", (req, res) => {
   saveDatabase();
 
   res.json({ success: true, message: newMessage, ticket });
+});
+
+// 16. Global Participant Chat Room Routes
+app.get("/api/chat/public", (req, res) => {
+  if (!db.publicChatMessages) db.publicChatMessages = [];
+  res.json(db.publicChatMessages);
+});
+
+app.post("/api/chat/public", (req, res) => {
+  const { sender, teamName, message, isAdmin } = req.body;
+
+  if (!sender || !message) {
+    return res.status(400).json({ error: "Missing required sender or message" });
+  }
+
+  if (!db.publicChatMessages) db.publicChatMessages = [];
+
+  const newMessage: PublicChatMessageRecord = {
+    id: `pchat-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+    sender: sender,
+    teamName: teamName || "INDIVIDUAL",
+    message: message.trim(),
+    timestamp: new Date().toISOString(),
+    isAdmin: Boolean(isAdmin)
+  };
+
+  db.publicChatMessages.push(newMessage);
+  
+  // Keep last 300 messages
+  if (db.publicChatMessages.length > 300) {
+    db.publicChatMessages = db.publicChatMessages.slice(db.publicChatMessages.length - 300);
+  }
+
+  saveDatabase();
+
+  res.json({ success: true, message: newMessage });
+});
+
+app.delete("/api/chat/public/:id", (req, res) => {
+  const { id } = req.params;
+  if (!db.publicChatMessages) db.publicChatMessages = [];
+  db.publicChatMessages = db.publicChatMessages.filter(m => m.id !== id);
+  saveDatabase();
+  res.json({ success: true, message: "Message deleted" });
+});
+
+app.post("/api/chat/public/pin/:id", (req, res) => {
+  const { id } = req.params;
+  if (!db.publicChatMessages) db.publicChatMessages = [];
+  const msg = db.publicChatMessages.find(m => m.id === id);
+  if (msg) {
+    msg.isPinned = !msg.isPinned;
+    saveDatabase();
+  }
+  res.json({ success: true, message: "Pin status updated" });
 });
 
 // 9. Gemini-Powered AI oracle / hint helper

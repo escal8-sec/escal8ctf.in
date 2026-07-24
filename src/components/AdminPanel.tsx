@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { Challenge, Submission, Category, EventConfig, TeamRecord, SupportTicket } from "../types";
 import SupportChat from "./SupportChat";
+import PublicChatRoom from "./PublicChatRoom";
 
 interface AdminPanelProps {
   challenges: Challenge[];
@@ -26,7 +27,7 @@ export default function AdminPanel({
   onInstanceAction
 }: AdminPanelProps) {
   // Main Sub-Tab State
-  const [adminTab, setAdminTab] = useState<"challenges" | "event" | "teams" | "telemetry" | "support" | "backup">("challenges");
+  const [adminTab, setAdminTab] = useState<"challenges" | "event" | "teams" | "telemetry" | "support" | "public_chat" | "backup">("challenges");
   
   // Support Tickets State
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
@@ -450,6 +451,18 @@ export default function AdminPanel({
         >
           <MessageSquare className="w-4 h-4 text-amber-400" />
           <span>Team Support Inbox ({supportTickets.length})</span>
+        </button>
+
+        <button
+          onClick={() => setAdminTab("public_chat")}
+          className={`px-4 py-2.5 rounded-lg text-xs font-mono font-bold flex items-center gap-2 cursor-pointer transition-all ${
+            adminTab === "public_chat"
+              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+              : "text-slate-400 hover:text-white"
+          }`}
+        >
+          <Users className="w-4 h-4 text-emerald-400" />
+          <span>Global Chat Arena (Moderation)</span>
         </button>
 
         <button
@@ -1187,7 +1200,28 @@ export default function AdminPanel({
         </div>
       )}
 
-      {/* TAB 6: BACKUP & SYSTEM RESET */}
+      {/* TAB 6: GLOBAL PARTICIPANT CHAT MODERATION */}
+      {adminTab === "public_chat" && (
+        <div className="bg-[#0e1424] border border-slate-800 rounded-xl p-6 space-y-6">
+          <div className="border-b border-slate-800 pb-4">
+            <h3 className="font-display font-bold text-lg text-white flex items-center gap-2">
+              <Users className="w-5 h-5 text-emerald-400" />
+              Global Participant Chat Room (Moderation Console)
+            </h3>
+            <p className="text-xs text-slate-400 font-mono mt-0.5">
+              Live moderation channel for all participant chat messages across teams. You can pin announcements or delete abusive messages.
+            </p>
+          </div>
+
+          <PublicChatRoom
+            username="ADMINISTRATOR"
+            teamName="ADMIN"
+            isAdmin={true}
+          />
+        </div>
+      )}
+
+      {/* TAB 7: BACKUP & SYSTEM RESET */}
       {adminTab === "backup" && (
         <div className="bg-[#0e1424] border border-slate-800 rounded-xl p-6 space-y-6">
           <div className="border-b border-slate-800 pb-3">

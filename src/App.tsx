@@ -317,8 +317,8 @@ export default function App() {
           </button>
 
           <button onClick={() => { setActiveTab("oracle"); setOracleChallenge(null); }} className={tabClass("oracle")}>
-            <Sparkles className="w-4 h-4" />
-            <span>Oracle AI Mentor</span>
+            <Sparkles className="w-4 h-4 text-cyan-400" />
+            <span>AI Oracle & Support Chat</span>
           </button>
 
           {isAdmin && (
@@ -424,6 +424,8 @@ export default function App() {
                 <AIOracle
                   challenges={challenges}
                   activeChallenge={oracleChallenge}
+                  username={username}
+                  teamName={teamName || "INDIVIDUAL"}
                 />
               </motion.div>
             )}

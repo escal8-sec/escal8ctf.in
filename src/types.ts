@@ -115,6 +115,16 @@ export interface SupportTicket {
   lastUpdated: string;
 }
 
+export interface PublicChatMessage {
+  id: string;
+  sender: string;
+  teamName: string;
+  message: string;
+  timestamp: string;
+  isAdmin?: boolean;
+  isPinned?: boolean;
+}
+
 export interface UnlockedHint {
   challengeId: string;
   hintIndex: number;

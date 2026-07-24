@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Sparkles, Terminal, Send, ArrowRight, BookOpen, BrainCircuit, ShieldAlert, MessageSquare, Shield } from "lucide-react";
+import { Sparkles, Terminal, Send, ArrowRight, BookOpen, BrainCircuit, ShieldAlert, MessageSquare, Shield, Users } from "lucide-react";
 import { Challenge } from "../types";
 import SupportChat from "./SupportChat";
+import PublicChatRoom from "./PublicChatRoom";
 
 interface Message {
   sender: "user" | "oracle";
@@ -19,7 +20,7 @@ interface AIOracleProps {
 }
 
 export default function AIOracle({ challenges, activeChallenge, onClose, username = "Operator", teamName = "INDIVIDUAL" }: AIOracleProps) {
-  const [activeTab, setActiveTab] = useState<"ai" | "admin">("ai");
+  const [activeTab, setActiveTab] = useState<"ai" | "admin" | "public">("ai");
   const [selectedChallengeId, setSelectedChallengeId] = useState<string>("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -179,176 +180,241 @@ export default function AIOracle({ challenges, activeChallenge, onClose, usernam
   return (
     <div className="bg-cyber-card border border-slate-800 rounded-xl overflow-hidden flex flex-col h-[650px] lg:h-[700px]">
       
-      {/* Oracle Controller Selector */}
-      <div className="p-4 bg-slate-900/80 border-b border-slate-800 shrink-0 flex flex-col sm:flex-row items-center justify-between gap-4">
+      {/* Top Channel Toggle: AI Oracle vs Direct Admin Support */}
+      <div className="bg-[#0b0f19] border-b border-slate-800 px-4 py-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <BrainCircuit className="w-5 h-5 text-cyan-400" />
-          <div>
-            <h2 className="font-display font-medium text-slate-100 flex items-center gap-1.5">
-              ESCAL8 Oracle AI Console
-              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-1.5" />
-            </h2>
-            <p className="text-[10px] font-mono text-slate-400">
-              SECURE TELEMETRY CHANNEL // NO COGNITIVE INTERCEPTION ALLOWED
-            </p>
-          </div>
-        </div>
-
-        {/* Challenge Context Selector Dropdown */}
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <label htmlFor="oracle-challenge-context" className="text-xs font-mono text-slate-400 uppercase shrink-0">
-            Context:
-          </label>
-          <select
-            id="oracle-challenge-context"
-            value={selectedChallengeId}
-            onChange={(e) => setSelectedChallengeId(e.target.value)}
-            className="flex-1 sm:w-60 bg-cyber-bg border border-slate-800 text-xs text-slate-200 p-2 rounded focus:outline-none focus:border-cyan-500 font-mono"
-          >
-            <option value="">-- General Security Concepts --</option>
-            {challenges.map(c => (
-              <option key={c.id} value={c.id}>
-                [{c.category.toUpperCase()}] {c.title} ({c.points} pts)
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Messages Feed */}
-      <div className="flex-1 p-5 overflow-y-auto bg-black/10 space-y-4">
-        {messages.map((msg, idx) => (
-          <div
-            key={idx}
-            className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}
-          >
-            <div className={`max-w-[85%] rounded-xl p-4 border space-y-2 leading-relaxed ${
-              msg.sender === "user"
-                ? "bg-slate-900 border-slate-800 text-slate-100 font-sans"
-                : "bg-gradient-to-br from-[#121c2c] to-[#0e1625] border-cyan-500/20 text-slate-200"
-            }`}>
-              
-              {/* Header inside bubble */}
-              <div className="flex items-center justify-between gap-6 mb-1 text-[10px] font-mono text-slate-500">
-                <span className="flex items-center gap-1 font-bold">
-                  {msg.sender === "user" ? (
-                    <span className="text-slate-400">Recruit Operator</span>
-                  ) : (
-                    <span className="text-cyan-400 flex items-center gap-1">
-                      <Sparkles className="w-3 h-3 text-cyan-400" />
-                      ESCAL8 Security Oracle
-                    </span>
-                  )}
-                </span>
-                <span>
-                  {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                </span>
-              </div>
-
-              {/* Message Content */}
-              <div className="space-y-1.5">
-                {msg.sender === "user" ? (
-                  <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
-                ) : (
-                  formatOracleResponse(msg.text)
-                )}
-              </div>
-            </div>
-          </div>
-        ))}
-
-        {/* Loading Indicator */}
-        {loading && (
-          <div className="flex justify-start">
-            <div className="max-w-[70%] rounded-xl p-4 border border-slate-800 bg-slate-950/40 text-slate-400 font-mono text-xs space-y-2">
-              <div className="flex items-center gap-2">
-                <Terminal className="w-4 h-4 text-cyan-400 animate-spin" />
-                <span>Interrogating model structures...</span>
-              </div>
-              <div className="w-full bg-slate-900 h-1 rounded overflow-hidden">
-                <div className="bg-cyan-500 h-1 w-2/3 rounded animate-pulse" />
-              </div>
-            </div>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Chat Prompt Input Bar */}
-      <div className="p-4 bg-slate-900/60 border-t border-slate-800 shrink-0 space-y-4">
-        {/* Suggested research shortcuts (Quick Questions) */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-none">
-          <BookOpen className="w-4 h-4 text-slate-500 shrink-0" />
-          <span className="text-[10px] font-mono text-slate-400 uppercase shrink-0">Research prompts:</span>
-          
-          {!selectedChallengeId ? (
-            <>
-              <button
-                onClick={() => handleQuickQuestion("Explain how cookie tampering works in web CTF")}
-                className="text-[10px] font-mono bg-slate-800 border border-slate-700/60 px-2.5 py-1 rounded text-slate-300 hover:text-cyan-400 hover:border-cyan-500/40 transition-colors shrink-0 cursor-pointer"
-              >
-                Cookie Tampering
-              </button>
-              <button
-                onClick={() => handleQuickQuestion("What are standard tools for XOR cipher decryption?")}
-                className="text-[10px] font-mono bg-slate-800 border border-slate-700/60 px-2.5 py-1 rounded text-slate-300 hover:text-cyan-400 hover:border-cyan-500/40 transition-colors shrink-0 cursor-pointer"
-              >
-                XOR Analysis
-              </button>
-              <button
-                onClick={() => handleQuickQuestion("Explain standard gets() buffer overflows simply")}
-                className="text-[10px] font-mono bg-slate-800 border border-slate-700/60 px-2.5 py-1 rounded text-slate-300 hover:text-cyan-400 hover:border-cyan-500/40 transition-colors shrink-0 cursor-pointer"
-              >
-                gets() Overflows
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={() => handleQuickQuestion(`What security concept is involved in challenge "${activeChallengeObj?.title}"?`)}
-                className="text-[10px] font-mono bg-slate-800 border border-slate-700/60 px-2.5 py-1 rounded text-slate-300 hover:text-cyan-400 hover:border-cyan-500/40 transition-colors shrink-0 cursor-pointer"
-              >
-                Concept Explanation
-              </button>
-              <button
-                onClick={() => handleQuickQuestion(`Explain any cryptographic or disassembly principles related to "${activeChallengeObj?.title}"`)}
-                className="text-[10px] font-mono bg-slate-800 border border-slate-700/60 px-2.5 py-1 rounded text-slate-300 hover:text-cyan-400 hover:border-cyan-500/40 transition-colors shrink-0 cursor-pointer"
-              >
-                Core Formula/Disassembly
-              </button>
-            </>
-          )}
-        </div>
-
-        {/* Input box */}
-        <form onSubmit={handleSendMessage} className="flex gap-2">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            disabled={loading}
-            placeholder={
-              selectedChallengeId 
-                ? `Ask hint on "${activeChallengeObj?.title}"...` 
-                : "Ask anything about cybersecurity tools & tactics..."
-            }
-            className="flex-1 bg-cyber-bg border border-slate-800 focus:border-cyan-500/60 text-sm text-slate-200 px-4 py-2.5 rounded-lg focus:outline-none transition-colors"
-          />
           <button
-            type="submit"
-            disabled={loading || !input.trim()}
-            className="px-4.5 bg-cyan-500 hover:bg-cyan-400 text-[#0b0f19] rounded-lg font-mono text-sm transition-all flex items-center justify-center gap-1 disabled:opacity-40 disabled:scale-100 hover:scale-102 active:scale-98 cursor-pointer"
+            onClick={() => setActiveTab("ai")}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+              activeTab === "ai"
+                ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40"
+                : "text-slate-400 hover:text-white"
+            }`}
           >
-            <Send className="w-4 h-4" />
-            <span>Send</span>
+            <BrainCircuit className="w-3.5 h-3.5 text-cyan-400" />
+            <span>🔮 AI Oracle Mentor</span>
           </button>
-        </form>
 
-        <div className="flex items-center gap-1.5 justify-center text-[10px] font-mono text-slate-500">
-          <ShieldAlert className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-          <span>Oracle complies with prompt armor protocols: exact flag characters are locked.</span>
+          <button
+            onClick={() => setActiveTab("admin")}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+              activeTab === "admin"
+                ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                : "text-slate-400 hover:text-white"
+            }`}
+          >
+            <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
+            <span>💬 Direct Admin Chat</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("public")}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+              activeTab === "public"
+                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                : "text-slate-400 hover:text-white"
+            }`}
+          >
+            <Users className="w-3.5 h-3.5 text-emerald-400" />
+            <span>🌐 Participant Chat Room</span>
+          </button>
         </div>
+
+        <span className="text-[10px] font-mono text-slate-500 hidden sm:inline">
+          TEAM: <strong className="text-cyan-400 uppercase">{teamName}</strong>
+        </span>
       </div>
+
+      {activeTab === "public" ? (
+        <div className="flex-1 p-4 bg-[#0b0f19]">
+          <PublicChatRoom
+            username={username}
+            teamName={teamName}
+            isAdmin={false}
+          />
+        </div>
+      ) : activeTab === "admin" ? (
+        <div className="flex-1 p-4 bg-[#0b0f19]">
+          <SupportChat
+            username={username}
+            teamName={teamName}
+            isAdmin={false}
+          />
+        </div>
+      ) : (
+        <>
+          {/* Oracle Controller Selector */}
+          <div className="p-4 bg-slate-900/80 border-b border-slate-800 shrink-0 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <BrainCircuit className="w-5 h-5 text-cyan-400" />
+              <div>
+                <h2 className="font-display font-medium text-slate-100 flex items-center gap-1.5">
+                  ESCAL8 Oracle AI Console
+                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-1.5" />
+                </h2>
+                <p className="text-[10px] font-mono text-slate-400">
+                  SECURE TELEMETRY CHANNEL // NO COGNITIVE INTERCEPTION ALLOWED
+                </p>
+              </div>
+            </div>
+
+            {/* Challenge Context Selector Dropdown */}
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <label htmlFor="oracle-challenge-context" className="text-xs font-mono text-slate-400 uppercase shrink-0">
+                Context:
+              </label>
+              <select
+                id="oracle-challenge-context"
+                value={selectedChallengeId}
+                onChange={(e) => setSelectedChallengeId(e.target.value)}
+                className="flex-1 sm:w-60 bg-cyber-bg border border-slate-800 text-xs text-slate-200 p-2 rounded focus:outline-none focus:border-cyan-500 font-mono"
+              >
+                <option value="">-- General Security Concepts --</option>
+                {challenges.map(c => (
+                  <option key={c.id} value={c.id}>
+                    [{c.category.toUpperCase()}] {c.title} ({c.points} pts)
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Messages Feed */}
+          <div className="flex-1 p-5 overflow-y-auto bg-black/10 space-y-4">
+            {messages.map((msg, idx) => (
+              <div
+                key={idx}
+                className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}
+              >
+                <div className={`max-w-[85%] rounded-xl p-4 border space-y-2 leading-relaxed ${
+                  msg.sender === "user"
+                    ? "bg-slate-900 border-slate-800 text-slate-100 font-sans"
+                    : "bg-gradient-to-br from-[#121c2c] to-[#0e1625] border-cyan-500/20 text-slate-200"
+                }`}>
+                  
+                  {/* Header inside bubble */}
+                  <div className="flex items-center justify-between gap-6 mb-1 text-[10px] font-mono text-slate-500">
+                    <span className="flex items-center gap-1 font-bold">
+                      {msg.sender === "user" ? (
+                        <span className="text-slate-400">Recruit Operator</span>
+                      ) : (
+                        <span className="text-cyan-400 flex items-center gap-1">
+                          <Sparkles className="w-3 h-3 text-cyan-400" />
+                          ESCAL8 Security Oracle
+                        </span>
+                      )}
+                    </span>
+                    <span>
+                      {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </span>
+                  </div>
+
+                  {/* Message Content */}
+                  <div className="space-y-1.5">
+                    {msg.sender === "user" ? (
+                      <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
+                    ) : (
+                      formatOracleResponse(msg.text)
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {/* Loading Indicator */}
+            {loading && (
+              <div className="flex justify-start">
+                <div className="max-w-[70%] rounded-xl p-4 border border-slate-800 bg-slate-950/40 text-slate-400 font-mono text-xs space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Terminal className="w-4 h-4 text-cyan-400 animate-spin" />
+                    <span>Interrogating model structures...</span>
+                  </div>
+                  <div className="w-full bg-slate-900 h-1 rounded overflow-hidden">
+                    <div className="bg-cyan-500 h-1 w-2/3 rounded animate-pulse" />
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Chat Prompt Input Bar */}
+          <div className="p-4 bg-slate-900/60 border-t border-slate-800 shrink-0 space-y-4">
+            {/* Suggested research shortcuts (Quick Questions) */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-none">
+              <BookOpen className="w-4 h-4 text-slate-500 shrink-0" />
+              <span className="text-[10px] font-mono text-slate-400 uppercase shrink-0">Research prompts:</span>
+              
+              {!selectedChallengeId ? (
+                <>
+                  <button
+                    onClick={() => handleQuickQuestion("Explain how cookie tampering works in web CTF")}
+                    className="text-[10px] font-mono bg-slate-800 border border-slate-700/60 px-2.5 py-1 rounded text-slate-300 hover:text-cyan-400 hover:border-cyan-500/40 transition-colors shrink-0 cursor-pointer"
+                  >
+                    Cookie Tampering
+                  </button>
+                  <button
+                    onClick={() => handleQuickQuestion("What are standard tools for XOR cipher decryption?")}
+                    className="text-[10px] font-mono bg-slate-800 border border-slate-700/60 px-2.5 py-1 rounded text-slate-300 hover:text-cyan-400 hover:border-cyan-500/40 transition-colors shrink-0 cursor-pointer"
+                  >
+                    XOR Analysis
+                  </button>
+                  <button
+                    onClick={() => handleQuickQuestion("Explain standard gets() buffer overflows simply")}
+                    className="text-[10px] font-mono bg-slate-800 border border-slate-700/60 px-2.5 py-1 rounded text-slate-300 hover:text-cyan-400 hover:border-cyan-500/40 transition-colors shrink-0 cursor-pointer"
+                  >
+                    gets() Overflows
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => handleQuickQuestion(`What security concept is involved in challenge "${activeChallengeObj?.title}"?`)}
+                    className="text-[10px] font-mono bg-slate-800 border border-slate-700/60 px-2.5 py-1 rounded text-slate-300 hover:text-cyan-400 hover:border-cyan-500/40 transition-colors shrink-0 cursor-pointer"
+                  >
+                    Concept Explanation
+                  </button>
+                  <button
+                    onClick={() => handleQuickQuestion(`Explain any cryptographic or disassembly principles related to "${activeChallengeObj?.title}"`)}
+                    className="text-[10px] font-mono bg-slate-800 border border-slate-700/60 px-2.5 py-1 rounded text-slate-300 hover:text-cyan-400 hover:border-cyan-500/40 transition-colors shrink-0 cursor-pointer"
+                  >
+                    Core Formula/Disassembly
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Input box */}
+            <form onSubmit={handleSendMessage} className="flex gap-2">
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                disabled={loading}
+                placeholder={
+                  selectedChallengeId 
+                    ? `Ask hint on "${activeChallengeObj?.title}"...` 
+                    : "Ask anything about cybersecurity tools & tactics..."
+                }
+                className="flex-1 bg-cyber-bg border border-slate-800 focus:border-cyan-500/60 text-sm text-slate-200 px-4 py-2.5 rounded-lg focus:outline-none transition-colors"
+              />
+              <button
+                type="submit"
+                disabled={loading || !input.trim()}
+                className="px-4.5 bg-cyan-500 hover:bg-cyan-400 text-[#0b0f19] rounded-lg font-mono text-sm transition-all flex items-center justify-center gap-1 disabled:opacity-40 disabled:scale-100 hover:scale-102 active:scale-98 cursor-pointer"
+              >
+                <Send className="w-4 h-4" />
+                <span>Send</span>
+              </button>
+            </form>
+
+            <div className="flex items-center gap-1.5 justify-center text-[10px] font-mono text-slate-500">
+              <ShieldAlert className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+              <span>Oracle complies with prompt armor protocols: exact flag characters are locked.</span>
+            </div>
+          </div>
+        </>
+      )}
 
     </div>
   );

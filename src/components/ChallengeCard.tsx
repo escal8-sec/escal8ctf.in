@@ -608,15 +608,52 @@ export default function ChallengeCard({
 
               {/* Interactive Help & AI Oracle Assistance */}
               <div className="flex flex-col md:flex-row gap-4 py-2">
-                {/* Traditional Static Hints */}
+                {/* Traditional Static Hints with Point Cost */}
                 <div className="flex-1 space-y-2">
-                  <span className="text-xs font-mono uppercase tracking-wider text-slate-400 font-bold block">
-                    Hints Manual:
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-mono uppercase tracking-wider text-slate-400 font-bold block">
+                      Hints Manual:
+                    </span>
+                    {challenge.hintCost ? (
+                      <span className="text-[10px] font-mono text-amber-400 font-bold">
+                        (Cost: -{challenge.hintCost} PTS per hint)
+                      </span>
+                    ) : null}
+                  </div>
                   {challenge.hints && challenge.hints.length > 0 ? (
                     <div className="space-y-2">
                       {challenge.hints.map((hint, hIdx) => {
                         const isRevealed = showHints[hIdx];
+                        const cost = challenge.hintCost || 0;
+
+                        const handleUnlockHint = async () => {
+                          if (cost > 0) {
+                            const confirmUnlock = window.confirm(
+                              `Unlocking Hint #${hIdx + 1} will deduct ${cost} PTS from your total score. Proceed?`
+                            );
+                            if (!confirmUnlock) return;
+                          }
+
+                          try {
+                            const res = await fetch(`/api/challenges/${challenge.id}/hint/unlock`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ username, hintIndex: hIdx })
+                            });
+                            if (res.ok) {
+                              const updated = [...showHints];
+                              updated[hIdx] = true;
+                              setShowHints(updated);
+                              onSolveSuccess(challenge.id, 0); // Trigger leaderboard sync
+                            }
+                          } catch (err) {
+                            // Fallback client reveal
+                            const updated = [...showHints];
+                            updated[hIdx] = true;
+                            setShowHints(updated);
+                          }
+                        };
+
                         return (
                           <div key={hIdx} className="text-xs font-mono">
                             {isRevealed ? (
@@ -625,19 +662,19 @@ export default function ChallengeCard({
                               </div>
                             ) : (
                               <button
-                                onClick={() => {
-                                  const updated = [...showHints];
-                                  updated[hIdx] = true;
-                                  setShowHints(updated);
-                                }}
-                                className="w-full text-left p-3 rounded-lg border border-slate-800 hover:border-slate-700 bg-slate-950/40 text-slate-400 hover:text-slate-200 transition-colors flex items-center justify-between"
+                                onClick={handleUnlockHint}
+                                className="w-full text-left p-3 rounded-lg border border-slate-800 hover:border-amber-500/50 bg-slate-950/40 text-slate-400 hover:text-slate-200 transition-all flex items-center justify-between cursor-pointer group"
                               >
-                                <span className="flex items-center gap-1.5">
-                                  <HelpCircle className="w-4 h-4 text-amber-500" />
+                                <span className="flex items-center gap-1.5 font-bold">
+                                  <HelpCircle className="w-4 h-4 text-amber-500 group-hover:scale-110 transition-transform" />
                                   Unlock Hint #{hIdx + 1}
                                 </span>
-                                <span className="text-[10px] uppercase bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                                  Free
+                                <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${
+                                  cost > 0
+                                    ? "bg-amber-950/80 text-amber-300 border-amber-500/40"
+                                    : "bg-slate-900 text-emerald-400 border-slate-800"
+                                }`}>
+                                  {cost > 0 ? `-${cost} PTS` : "Free"}
                                 </span>
                               </button>
                             )}
