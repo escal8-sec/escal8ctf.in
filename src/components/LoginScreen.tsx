@@ -43,7 +43,14 @@ export default function LoginScreen({ onAuthSuccess }: LoginScreenProps) {
         body: JSON.stringify(payload),
       });
 
-      const data = await response.json();
+      let data: any = {};
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        data = await response.json();
+      } else {
+        const textResp = await response.text();
+        throw new Error(`Server returned non-JSON response (${response.status}). Server may be restarting, please try again in a moment.`);
+      }
 
       if (!response.ok) {
         throw new Error(data.error || "Authentication handshake failure.");
