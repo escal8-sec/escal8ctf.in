@@ -753,7 +753,7 @@ const DEFAULT_CHALLENGES: Challenge[] = [
 const DEFAULT_SUBMISSIONS: Submission[] = [];
 
 const DEFAULT_USERS: User[] = [
-  { username: "admin", passwordHash: "adminpassword", isAdmin: true, teamName: "ADMIN" }
+  { username: "escal8", passwordHash: "ESCAL8@", isAdmin: true, teamName: "ADMIN" }
 ];
 
 interface EventConfig {
@@ -894,7 +894,21 @@ async function loadDatabase() {
         db.challenges = activeOnlineChallenges;
         db.submissions = submissions;
         db.users = users.length > 0 ? users : DEFAULT_USERS;
-        console.log(`[Firebase] Loaded & merged ${activeOnlineChallenges.length} challenges, ${submissions.length} submissions, ${users.length} users from Firestore.`);
+        
+        // Ensure Escal8 admin user is present and configured with ESCAL8@
+        let escal8User = db.users.find(u => u.username === "escal8" || u.username === "admin");
+        if (escal8User) {
+          escal8User.username = "escal8";
+          escal8User.passwordHash = "ESCAL8@";
+          escal8User.isAdmin = true;
+          escal8User.teamName = "ADMIN";
+        } else {
+          escal8User = { username: "escal8", passwordHash: "ESCAL8@", isAdmin: true, teamName: "ADMIN" };
+          db.users.push(escal8User);
+        }
+        saveUserToFirestore(escal8User);
+
+        console.log(`[Firebase] Loaded & merged ${activeOnlineChallenges.length} challenges, ${submissions.length} submissions, ${db.users.length} users from Firestore.`);
         saveDatabase();
         if (hasNewUpdates) {
           await saveAllChallengesToFirestore(mergedChallenges);
@@ -946,8 +960,8 @@ app.post("/api/auth/register", (req, res) => {
     return res.status(400).json({ error: "Username is already registered. Please login instead." });
   }
 
-  // Auto-promote "admin" or users starting with admin to admin
-  const isAdmin = cleanUsername === "admin" || cleanUsername.startsWith("admin_");
+  // Auto-promote "escal8", "admin", or users starting with admin to admin
+  const isAdmin = cleanUsername === "escal8" || cleanUsername === "admin" || cleanUsername.startsWith("admin_");
 
   const newUser: User = {
     username: cleanUsername,
