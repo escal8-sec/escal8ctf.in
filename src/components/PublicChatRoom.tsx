@@ -12,7 +12,8 @@ export default function PublicChatRoom({ username, teamName, isAdmin }: PublicCh
   const [messages, setMessages] = useState<PublicChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState("");
   const [sending, setSending] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const prevMessageCountRef = useRef(0);
 
   useEffect(() => {
     fetchChat();
@@ -21,7 +22,12 @@ export default function PublicChatRoom({ username, teamName, isAdmin }: PublicCh
   }, []);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messages.length > prevMessageCountRef.current) {
+      if (chatContainerRef.current) {
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      }
+    }
+    prevMessageCountRef.current = messages.length;
   }, [messages]);
 
   const fetchChat = async () => {
@@ -134,7 +140,7 @@ export default function PublicChatRoom({ username, teamName, isAdmin }: PublicCh
       )}
 
       {/* Messages Feed */}
-      <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-[#0b0f19]">
+      <div ref={chatContainerRef} className="flex-1 p-4 overflow-y-auto space-y-3 bg-[#0b0f19]">
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500 space-y-2 font-mono text-xs">
             <MessageSquare className="w-8 h-8 text-slate-600" />
@@ -199,7 +205,6 @@ export default function PublicChatRoom({ username, teamName, isAdmin }: PublicCh
             );
           })
         )}
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Input Form */}

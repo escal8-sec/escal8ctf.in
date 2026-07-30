@@ -13,7 +13,8 @@ export default function SupportChat({ username, teamName, isAdmin }: SupportChat
   const [inputMessage, setInputMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const prevMessageCountRef = useRef(0);
 
   useEffect(() => {
     fetchChat();
@@ -22,7 +23,13 @@ export default function SupportChat({ username, teamName, isAdmin }: SupportChat
   }, [teamName]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const currentLength = ticket?.messages?.length || 0;
+    if (currentLength > prevMessageCountRef.current) {
+      if (chatContainerRef.current) {
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      }
+    }
+    prevMessageCountRef.current = currentLength;
   }, [ticket?.messages]);
 
   const fetchChat = async () => {
@@ -98,7 +105,7 @@ export default function SupportChat({ username, teamName, isAdmin }: SupportChat
       </div>
 
       {/* Messages Feed */}
-      <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-[#0b0f19]">
+      <div ref={chatContainerRef} className="flex-1 p-4 overflow-y-auto space-y-3 bg-[#0b0f19]">
         {(!ticket?.messages || ticket.messages.length === 0) ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500 space-y-2 font-mono text-xs">
             <AlertCircle className="w-8 h-8 text-slate-600" />
@@ -145,7 +152,6 @@ export default function SupportChat({ username, teamName, isAdmin }: SupportChat
             );
           })
         )}
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Input Box */}

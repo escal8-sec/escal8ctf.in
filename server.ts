@@ -762,6 +762,22 @@ interface EventConfig {
   announcement?: string;
   startTime?: string;
   endTime?: string;
+  scoreboardFrozen?: boolean;
+  freezeMessage?: string;
+  liveTimerTitle?: string;
+}
+
+interface WriteupSubmissionRecord {
+  id: string;
+  challengeId: string;
+  challengeTitle: string;
+  username: string;
+  teamName: string;
+  content: string;
+  timestamp: string;
+  status: 'pending' | 'approved' | 'rejected';
+  adminComment?: string;
+  bonusPointsAwarded?: number;
 }
 
 interface TeamStatusRecord {
@@ -804,6 +820,16 @@ interface PublicChatMessageRecord {
   isPinned?: boolean;
 }
 
+interface AuditLogRecord {
+  id: string;
+  action: string;
+  teamName: string;
+  username: string;
+  details: string;
+  timestamp: string;
+  ip?: string;
+}
+
 interface SavedState {
   challenges: Challenge[];
   submissions: Submission[];
@@ -813,6 +839,8 @@ interface SavedState {
   supportTickets?: SupportTicketRecord[];
   unlockedHints?: UnlockedHintRecord[];
   publicChatMessages?: PublicChatMessageRecord[];
+  writeups?: WriteupSubmissionRecord[];
+  auditLogs?: AuditLogRecord[];
 }
 
 // Memory database with file sync fallback
@@ -828,7 +856,9 @@ let db: SavedState = {
   teamStatuses: [],
   supportTickets: [],
   unlockedHints: [],
-  publicChatMessages: []
+  publicChatMessages: [],
+  writeups: [],
+  auditLogs: []
 };
 
 // Safe file write & read
@@ -2526,7 +2556,12 @@ app.post("/api/submit", (req, res) => {
 
   const cleanSubmittedFlag = flag.trim();
   const cleanCorrectFlag = chal.flag.trim();
-  const isCorrect = cleanSubmittedFlag === cleanCorrectFlag;
+  let isCorrect = cleanSubmittedFlag === cleanCorrectFlag;
+  if (!isCorrect && chal.isDynamicFlag) {
+    const defaultDynamic = `ESCAL8{FLAG_${chal.id.toUpperCase()}_${userTeam}_${(userTeam.length * 9431) % 99999}}`;
+    const tmplDynamic = chal.dynamicFlagTemplate ? chal.dynamicFlagTemplate.replace(/\{team\}/gi, userTeam).replace(/\{id\}/gi, chal.id) : defaultDynamic;
+    isCorrect = cleanSubmittedFlag === defaultDynamic || cleanSubmittedFlag === tmplDynamic;
+  }
 
   // Check First Blood status (has anyone solved this challenge before?)
   let isFirstBlood = false;
@@ -2572,6 +2607,13 @@ app.post("/api/submit", (req, res) => {
   if (isCorrect) {
     chal.solvedCount = (chal.solvedCount || 0) + 1;
   }
+
+  logAudit(
+    isCorrect ? (isFirstBlood ? "FIRST_BLOOD" : "FLAG_CAPTURED") : "FLAG_FAILED",
+    userTeam,
+    trimmedUsername,
+    `${isCorrect ? "Solved" : "Failed attempt on"} '${chal.title}' (${isCorrect ? "+" + earnedPoints + " pts" : "invalid flag"})`
+  );
 
   saveDatabase();
   saveSubmissionToFirestore(newSubmission);
@@ -2659,7 +2701,12 @@ app.get("/api/leaderboard", (req, res) => {
 
   res.json({
     users: usersLeaderboard,
-    teams: teamsLeaderboard
+    teams: teamsLeaderboard,
+    scoreboardFrozen: Boolean(db.eventConfig?.scoreboardFrozen),
+    freezeMessage: db.eventConfig?.freezeMessage || "❄️ Scoreboard rankings are temporarily frozen for final validation.",
+    liveTimerTitle: db.eventConfig?.liveTimerTitle || "COMPETITION COUNTDOWN",
+    startTime: db.eventConfig?.startTime,
+    endTime: db.eventConfig?.endTime
   });
 });
 
@@ -2684,7 +2731,7 @@ app.get("/api/event/config", (req, res) => {
 });
 
 app.post("/api/admin/event/config", (req, res) => {
-  const { status, statusMessage, announcement, startTime, endTime } = req.body || {};
+  const { status, statusMessage, announcement, startTime, endTime, scoreboardFrozen, freezeMessage, liveTimerTitle } = req.body || {};
   if (!db.eventConfig) {
     db.eventConfig = { status: 'active' };
   }
@@ -2693,6 +2740,9 @@ app.post("/api/admin/event/config", (req, res) => {
   if (announcement !== undefined) db.eventConfig.announcement = announcement;
   if (startTime !== undefined) db.eventConfig.startTime = startTime;
   if (endTime !== undefined) db.eventConfig.endTime = endTime;
+  if (scoreboardFrozen !== undefined) db.eventConfig.scoreboardFrozen = scoreboardFrozen;
+  if (freezeMessage !== undefined) db.eventConfig.freezeMessage = freezeMessage;
+  if (liveTimerTitle !== undefined) db.eventConfig.liveTimerTitle = liveTimerTitle;
 
   saveDatabase();
   res.json({ success: true, eventConfig: db.eventConfig });
@@ -3041,6 +3091,115 @@ app.post("/api/chat/public/pin/:id", (req, res) => {
     saveDatabase();
   }
   res.json({ success: true, message: "Pin status updated" });
+});
+
+// Helper for Activity Audit Trail
+function logAudit(action: string, teamName: string, username: string, details: string) {
+  if (!db.auditLogs) db.auditLogs = [];
+  db.auditLogs.unshift({
+    id: `audit-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+    action,
+    teamName,
+    username,
+    details,
+    timestamp: new Date().toISOString()
+  });
+  if (db.auditLogs.length > 500) {
+    db.auditLogs = db.auditLogs.slice(0, 500);
+  }
+  saveDatabase();
+}
+
+// 16. Dynamic Flag & Checkpoint Route
+app.get("/api/challenges/:id/dynamic-flag", (req, res) => {
+  const { id } = req.params;
+  const { teamName } = req.query;
+  const chal = db.challenges.find(c => c.id === id);
+  if (!chal) {
+    return res.status(404).json({ error: "Challenge not found" });
+  }
+  const cleanTeam = String(teamName || "DEFAULT_TEAM").toUpperCase().replace(/[^A-Z0-9_]/g, "");
+  const defaultDynamic = `ESCAL8{FLAG_${id.toUpperCase()}_${cleanTeam}_${(cleanTeam.length * 9431) % 99999}}`;
+  const flag = chal.dynamicFlagTemplate ? chal.dynamicFlagTemplate.replace(/\{team\}/gi, cleanTeam).replace(/\{id\}/gi, id) : defaultDynamic;
+  res.json({ success: true, flag, challengeId: id, teamName: cleanTeam });
+});
+
+// 17. CTF Writeup Submission & Admin Approval Portal
+app.get("/api/writeups", (req, res) => {
+  const { teamName, status } = req.query;
+  let list = db.writeups || [];
+  if (teamName) {
+    list = list.filter(w => w.teamName.toLowerCase() === String(teamName).toLowerCase());
+  }
+  if (status) {
+    list = list.filter(w => w.status === status);
+  }
+  res.json(list);
+});
+
+app.post("/api/writeups", (req, res) => {
+  const { challengeId, challengeTitle, username, teamName, content } = req.body;
+  if (!challengeId || !username || !content) {
+    return res.status(400).json({ error: "Missing required fields for writeup submission" });
+  }
+  if (!db.writeups) db.writeups = [];
+  const rec: WriteupSubmissionRecord = {
+    id: `writeup-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+    challengeId,
+    challengeTitle: challengeTitle || "Challenge",
+    username,
+    teamName: teamName || "INDIVIDUAL",
+    content,
+    timestamp: new Date().toISOString(),
+    status: 'pending'
+  };
+  db.writeups.push(rec);
+  logAudit("WRITEUP_SUBMITTED", rec.teamName, rec.username, `Submitted writeup for ${rec.challengeTitle}`);
+  saveDatabase();
+  res.json({ success: true, message: "Writeup submitted for administrative review!", writeup: rec });
+});
+
+app.post("/api/admin/writeups/:id/review", (req, res) => {
+  const { id } = req.params;
+  const { status, adminComment, bonusPointsAwarded } = req.body;
+  if (!db.writeups) db.writeups = [];
+  const rec = db.writeups.find(w => w.id === id);
+  if (!rec) {
+    return res.status(404).json({ error: "Writeup submission not found" });
+  }
+  rec.status = status || 'approved';
+  if (adminComment !== undefined) rec.adminComment = adminComment;
+  if (bonusPointsAwarded !== undefined) rec.bonusPointsAwarded = Number(bonusPointsAwarded);
+
+  if (rec.status === 'approved' && (rec.bonusPointsAwarded || 0) > 0) {
+    const bonusDelta = rec.bonusPointsAwarded || 0;
+    db.submissions.push({
+      id: `sub-writeup-${Date.now()}`,
+      username: rec.username,
+      teamName: rec.teamName,
+      challengeId: rec.challengeId,
+      challengeTitle: `[WRITEUP BONUS: +${bonusDelta} PTS]: ${rec.challengeTitle}`,
+      points: bonusDelta,
+      timestamp: new Date().toISOString(),
+      success: true,
+      flagSubmitted: `[WRITEUP APPROVED +${bonusDelta} PTS]`
+    });
+  }
+
+  logAudit("WRITEUP_REVIEWED", rec.teamName, "admin", `Reviewed writeup (${rec.status}) for ${rec.challengeTitle} [Bonus: ${rec.bonusPointsAwarded || 0} pts]`);
+  saveDatabase();
+  res.json({ success: true, writeup: rec, message: `Writeup marked as ${rec.status}.` });
+});
+
+// 18. Activity Audit Trail & Threat Log
+app.get("/api/admin/audit-logs", (req, res) => {
+  res.json(db.auditLogs || []);
+});
+
+app.post("/api/admin/audit-logs", (req, res) => {
+  const { action, teamName, username, details } = req.body;
+  logAudit(action || "GENERAL_AUDIT", teamName || "SYSTEM", username || "admin", details || "Audit record created");
+  res.json({ success: true, logs: db.auditLogs });
 });
 
 // 9. Gemini-Powered AI oracle / hint helper

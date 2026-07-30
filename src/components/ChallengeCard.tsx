@@ -4,9 +4,9 @@ import {
   Terminal, Shield, Key, Cpu, FileCode, Map, Globe, 
   CheckCircle2, XCircle, Sparkles, Copy, Lock, Unlock, HelpCircle,
   Play, Square, RotateCcw, Clock, Activity, Eye, Network, Smartphone, Coins,
-  Download, Image as ImageIcon
+  Download, Image as ImageIcon, Trophy, Users
 } from "lucide-react";
-import { Challenge, Category } from "../types";
+import { Challenge, Category, Submission } from "../types";
 import baseImage from "../assets/images/forensics_base_image_1784827631762.jpg";
 import corruptedImage from "../assets/images/forensics_corrupted_image_1784827646286.jpg";
 
@@ -54,6 +54,7 @@ interface ChallengeCardProps {
   challenge: Challenge;
   username: string;
   isSolved: boolean;
+  submissions?: Submission[];
   onSolveSuccess: (challengeId: string, points: number) => void;
   onOpenOracle: (challenge: Challenge) => void;
   onInstanceAction?: (challengeId: string, action: "start" | "stop" | "restart", timeoutMinutes?: number) => void;
@@ -63,16 +64,23 @@ export default function ChallengeCard({
   challenge, 
   username, 
   isSolved, 
+  submissions = [],
   onSolveSuccess,
   onOpenOracle,
   onInstanceAction
 }: ChallengeCardProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [showSolversModal, setShowSolversModal] = useState(false);
   const [flagInput, setFlagInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
   const [showHints, setShowHints] = useState<boolean[]>([]);
   const [copiedFileIndex, setCopiedFileIndex] = useState<number | null>(null);
+
+  const challengeSubmissions = submissions.filter(s => s.challengeId === challenge.id && s.success);
+  const firstBlood = challengeSubmissions.length > 0
+    ? [...challengeSubmissions].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())[0]
+    : null;
   const [showSandboxFrame, setShowSandboxFrame] = useState<boolean>(false);
   const [sandboxPayload, setSandboxPayload] = useState<string>("");
   const [sandboxUser, setSandboxUser] = useState<string>("' OR '1'='1");
@@ -224,6 +232,16 @@ export default function ChallengeCard({
                   <CheckCircle2 className="w-3 h-3" /> Solved
                 </span>
               )}
+              {firstBlood && (
+                <span 
+                  onClick={(e) => { e.stopPropagation(); setShowSolversModal(true); }}
+                  className="inline-flex items-center gap-1.5 bg-rose-950/80 border border-rose-500/50 text-rose-300 text-xs px-2.5 py-0.5 rounded-full font-mono cursor-pointer hover:bg-rose-900/80 transition shadow-sm shadow-rose-900/20"
+                  title={`First Blood by ${firstBlood.teamName || firstBlood.username}`}
+                >
+                  <Trophy className="w-3 h-3 text-amber-400" />
+                  <span>1st Blood: {firstBlood.teamName || firstBlood.username}</span>
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-400 font-mono">
               <span className={`uppercase font-bold tracking-wider ${colors.text}`}>{challenge.category}</span>
@@ -245,9 +263,14 @@ export default function ChallengeCard({
             <div className="text-xl font-bold text-slate-200">
               {challenge.points} <span className="text-xs text-slate-400">PTS</span>
             </div>
-            <div className="text-xs text-slate-500">
-              {challenge.solvedCount || 0} Solves
-            </div>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setShowSolversModal(true); }}
+              className="text-xs text-slate-400 hover:text-cyan-400 transition flex items-center gap-1 justify-end ml-auto underline decoration-dotted underline-offset-2"
+            >
+              <Users className="w-3 h-3" />
+              <span>{challenge.solvedCount || 0} Solves</span>
+            </button>
           </div>
           <div className="text-slate-500 text-lg font-mono">
             {isOpen ? "[-]" : "[+]"}
@@ -779,6 +802,87 @@ export default function ChallengeCard({
                 </AnimatePresence>
               </div>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Challenge Solvers Modal */}
+      <AnimatePresence>
+        {showSolversModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowSolversModal(false)}
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-[#0e1320] border border-slate-800 rounded-xl w-full max-w-md overflow-hidden shadow-2xl"
+            >
+              <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/60">
+                <div className="flex items-center gap-2">
+                  <Trophy className="w-5 h-5 text-amber-400" />
+                  <h3 className="text-sm font-display font-bold text-white uppercase tracking-wider">
+                    {challenge.title} • Solvers ({challengeSubmissions.length})
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setShowSolversModal(false)}
+                  className="text-slate-400 hover:text-white transition font-mono text-xs px-2 py-1 bg-slate-800/80 rounded"
+                >
+                  [CLOSE]
+                </button>
+              </div>
+
+              <div className="p-4 max-h-80 overflow-y-auto space-y-2">
+                {challengeSubmissions.length === 0 ? (
+                  <div className="text-center py-6 text-slate-500 font-mono text-xs">
+                    No solutions submitted yet. Be the first blood!
+                  </div>
+                ) : (
+                  [...challengeSubmissions]
+                    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+                    .map((sub, index) => (
+                      <div
+                        key={sub.id}
+                        className={`flex items-center justify-between p-2.5 rounded-lg border font-mono text-xs ${
+                          index === 0
+                            ? "bg-amber-950/40 border-amber-500/40 text-amber-200"
+                            : "bg-slate-900/60 border-slate-800 text-slate-300"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                            index === 0 ? "bg-amber-500 text-black" : "bg-slate-800 text-slate-400"
+                          }`}>
+                            #{index + 1}
+                          </span>
+                          <div>
+                            <div className="font-bold text-white flex items-center gap-1.5">
+                              {sub.teamName ? `${sub.teamName} (${sub.username})` : sub.username}
+                              {index === 0 && (
+                                <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.2 rounded uppercase">
+                                  1st Blood
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-slate-500">
+                              {new Date(sub.timestamp).toLocaleString()}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right text-cyan-400 font-bold">
+                          +{sub.pointsEarned} PTS
+                        </div>
+                      </div>
+                    ))
+                )}
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

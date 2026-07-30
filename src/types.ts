@@ -24,6 +24,8 @@ export interface Challenge {
   files?: { name: string; content?: string; url?: string; imageUrl?: string; size?: string }[];
   hintCost?: number;
   isLiveInstance?: boolean;
+  isDynamicFlag?: boolean;
+  dynamicFlagTemplate?: string;
   instanceConfig?: {
     status?: 'stopped' | 'running';
     connectionUrl?: string;
@@ -80,6 +82,22 @@ export interface EventConfig {
   announcement?: string;
   startTime?: string;
   endTime?: string;
+  scoreboardFrozen?: boolean;
+  freezeMessage?: string;
+  liveTimerTitle?: string;
+}
+
+export interface WriteupSubmission {
+  id: string;
+  challengeId: string;
+  challengeTitle: string;
+  username: string;
+  teamName: string;
+  content: string; // Markdown / explanation
+  timestamp: string;
+  status: 'pending' | 'approved' | 'rejected';
+  adminComment?: string;
+  bonusPointsAwarded?: number;
 }
 
 export interface TeamRecord {

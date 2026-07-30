@@ -25,11 +25,17 @@ export default function AIOracle({ challenges, activeChallenge, onClose, usernam
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const prevMessageCountRef = useRef(0);
 
-  // Auto scroll to bottom
+  // Auto scroll to bottom only when new message arrives
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messages.length > prevMessageCountRef.current) {
+      if (chatContainerRef.current) {
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      }
+    }
+    prevMessageCountRef.current = messages.length;
   }, [messages]);
 
   // If parent sets an active challenge, pre-select it and greet user
@@ -280,7 +286,7 @@ export default function AIOracle({ challenges, activeChallenge, onClose, usernam
           </div>
 
           {/* Messages Feed */}
-          <div className="flex-1 p-5 overflow-y-auto bg-black/10 space-y-4">
+          <div ref={chatContainerRef} className="flex-1 p-5 overflow-y-auto bg-black/10 space-y-4">
             {messages.map((msg, idx) => (
               <div
                 key={idx}
@@ -335,7 +341,6 @@ export default function AIOracle({ challenges, activeChallenge, onClose, usernam
                 </div>
               </div>
             )}
-            <div ref={messagesEndRef} />
           </div>
 
           {/* Chat Prompt Input Bar */}

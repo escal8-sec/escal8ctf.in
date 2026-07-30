@@ -10,6 +10,7 @@ import Leaderboard from "./components/Leaderboard";
 import AIOracle from "./components/AIOracle";
 import AdminPanel from "./components/AdminPanel";
 import LoginScreen from "./components/LoginScreen";
+import { Escal8Logo } from "./components/Escal8Logo";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<"challenges" | "leaderboard" | "oracle" | "admin">("challenges");
@@ -180,8 +181,8 @@ export default function App() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between flex-wrap gap-4">
             {/* Platform Identity */}
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-cyan-950/60 border border-cyan-500/40 rounded-xl flex items-center justify-center text-cyan-400 shadow-md shadow-cyan-500/10">
-                <Shield className="w-6 h-6 animate-pulse" />
+              <div className="w-11 h-11 flex items-center justify-center shrink-0">
+                <Escal8Logo className="w-11 h-11" glow={true} />
               </div>
               <div>
                 <div className="flex items-center gap-2">
@@ -247,8 +248,8 @@ export default function App() {
           
           {/* Platform Identity */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-cyan-950/60 border border-cyan-500/40 rounded-xl flex items-center justify-center text-cyan-400 shadow-md shadow-cyan-500/10">
-              <Shield className="w-6 h-6 animate-pulse" />
+            <div className="w-11 h-11 flex items-center justify-center shrink-0">
+              <Escal8Logo className="w-11 h-11" glow={true} />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -387,6 +388,7 @@ export default function App() {
                           challenge={chal}
                           username={username}
                           isSolved={isSolved}
+                          submissions={submissions}
                           onSolveSuccess={handleSolveSuccess}
                           onOpenOracle={handleOpenOracleOnChallenge}
                           onInstanceAction={handleInstanceAction}

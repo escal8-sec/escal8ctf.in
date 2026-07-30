@@ -10,6 +10,7 @@ import {
 import { Challenge, Submission, Category, EventConfig, TeamRecord, SupportTicket } from "../types";
 import SupportChat from "./SupportChat";
 import PublicChatRoom from "./PublicChatRoom";
+import { Escal8Logo } from "./Escal8Logo";
 
 interface AdminPanelProps {
   challenges: Challenge[];
@@ -27,11 +28,17 @@ export default function AdminPanel({
   onInstanceAction
 }: AdminPanelProps) {
   // Main Sub-Tab State
-  const [adminTab, setAdminTab] = useState<"challenges" | "event" | "teams" | "telemetry" | "support" | "public_chat" | "backup">("challenges");
+  const [adminTab, setAdminTab] = useState<"challenges" | "event" | "teams" | "telemetry" | "support" | "public_chat" | "writeups" | "audit" | "backup">("challenges");
   
   // Support Tickets State
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
   const [selectedChatTeam, setSelectedChatTeam] = useState<string>("");
+
+  // Writeups & Audit State
+  const [writeups, setWriteups] = useState<any[]>([]);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewBonus, setReviewBonus] = useState(25);
 
   // Challenge Form State
   const [editingChallenge, setEditingChallenge] = useState<Partial<Challenge> | null>(null);
@@ -53,7 +60,10 @@ export default function AdminPanel({
     statusMessage: "CTF Competition is Live",
     announcement: "",
     startTime: "",
-    endTime: ""
+    endTime: "",
+    scoreboardFrozen: false,
+    freezeMessage: "❄️ Scoreboard rankings are temporarily frozen for final validation.",
+    liveTimerTitle: "COMPETITION COUNTDOWN"
   });
   const [eventSaveSuccess, setEventSaveSuccess] = useState("");
 
@@ -67,7 +77,33 @@ export default function AdminPanel({
     fetchEventConfig();
     fetchTeams();
     fetchSupportTickets();
+    fetchWriteups();
+    fetchAuditLogs();
   }, []);
+
+  const fetchWriteups = async () => {
+    try {
+      const res = await fetch("/api/writeups");
+      if (res.ok) {
+        const data = await res.json();
+        setWriteups(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch writeups:", err);
+    }
+  };
+
+  const fetchAuditLogs = async () => {
+    try {
+      const res = await fetch("/api/admin/audit-logs");
+      if (res.ok) {
+        const data = await res.json();
+        setAuditLogs(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch audit logs:", err);
+    }
+  };
 
   const fetchSupportTickets = async () => {
     try {
@@ -119,7 +155,9 @@ export default function AdminPanel({
     hints: [],
     author: "Admin_Operator",
     files: [],
-    isLiveInstance: false
+    isLiveInstance: false,
+    isDynamicFlag: false,
+    dynamicFlagTemplate: "ESCAL8{FLAG_{id}_{team}_8819}"
   });
 
   const handleStartCreate = () => {
@@ -305,6 +343,26 @@ export default function AdminPanel({
     });
   };
 
+  const handleReviewWriteup = async (id: string, status: string) => {
+    try {
+      const res = await fetch(`/api/admin/writeups/${id}/review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status,
+          adminComment: reviewComment,
+          bonusPointsAwarded: status === "approved" ? reviewBonus : 0
+        })
+      });
+      if (res.ok) {
+        fetchWriteups();
+        onRefreshData();
+      }
+    } catch (err) {
+      console.error("Failed to review writeup:", err);
+    }
+  };
+
   const filteredChallenges = challenges.filter(c => {
     const matchesCategory = categoryFilter === "all" || c.category === categoryFilter;
     const matchesSearch = !searchFilter || c.title.toLowerCase().includes(searchFilter.toLowerCase()) || c.id.toLowerCase().includes(searchFilter.toLowerCase());
@@ -321,8 +379,8 @@ export default function AdminPanel({
       <div className="bg-[#0e1424] border border-slate-800 rounded-xl p-6 space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
           <div>
-            <div className="flex items-center gap-2">
-              <Shield className="w-5 h-5 text-cyan-400" />
+            <div className="flex items-center gap-2.5">
+              <Escal8Logo className="w-7 h-7" glow={true} />
               <h2 className="text-xl font-display font-bold text-white tracking-tight">Admin Control Center</h2>
               <span className="text-[10px] font-mono font-bold bg-cyan-950 text-cyan-400 px-2 py-0.5 rounded border border-cyan-800/40 uppercase">
                 CTF OPERATOR
@@ -466,6 +524,36 @@ export default function AdminPanel({
         </button>
 
         <button
+          onClick={() => {
+            setAdminTab("writeups");
+            fetchWriteups();
+          }}
+          className={`px-4 py-2.5 rounded-lg text-xs font-mono font-bold flex items-center gap-2 cursor-pointer transition-all ${
+            adminTab === "writeups"
+              ? "bg-purple-500/20 text-purple-300 border border-purple-500/40"
+              : "text-slate-400 hover:text-white"
+          }`}
+        >
+          <FileCode className="w-4 h-4 text-purple-400" />
+          <span>Writeup Reviews ({writeups.filter(w => w.status === 'pending').length})</span>
+        </button>
+
+        <button
+          onClick={() => {
+            setAdminTab("audit");
+            fetchAuditLogs();
+          }}
+          className={`px-4 py-2.5 rounded-lg text-xs font-mono font-bold flex items-center gap-2 cursor-pointer transition-all ${
+            adminTab === "audit"
+              ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
+              : "text-slate-400 hover:text-white"
+          }`}
+        >
+          <History className="w-4 h-4 text-rose-400" />
+          <span>Activity Audit Trail ({auditLogs.length})</span>
+        </button>
+
+        <button
           onClick={() => setAdminTab("backup")}
           className={`px-4 py-2.5 rounded-lg text-xs font-mono font-bold flex items-center gap-2 cursor-pointer transition-all ${
             adminTab === "backup"
@@ -591,6 +679,37 @@ export default function AdminPanel({
                       className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-emerald-400 font-mono focus:border-cyan-500 outline-none"
                     />
                   </div>
+                </div>
+
+                {/* Dynamic Flag & Per-Team Checkpoint Generator */}
+                <div className="bg-slate-950/60 border border-cyan-500/30 p-3 rounded-lg space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-mono font-bold text-cyan-300 uppercase flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-cyan-400" />
+                      Dynamic Per-Team Flag Checkpoint Mode
+                    </label>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(editingChallenge.isDynamicFlag)}
+                      onChange={(e) => setEditingChallenge({ ...editingChallenge, isDynamicFlag: e.target.checked })}
+                      className="w-4 h-4 accent-cyan-500"
+                    />
+                  </div>
+                  {editingChallenge.isDynamicFlag && (
+                    <div>
+                      <label className="block text-[10px] font-mono text-slate-400 mb-1">Dynamic Flag Template ({'{team}'} & {'{id}'} tokens supported)</label>
+                      <input
+                        type="text"
+                        value={editingChallenge.dynamicFlagTemplate || ""}
+                        onChange={(e) => setEditingChallenge({ ...editingChallenge, dynamicFlagTemplate: e.target.value })}
+                        placeholder="ESCAL8{FLAG_{id}_{team}_8819}"
+                        className="w-full bg-slate-900 border border-slate-800 rounded p-2 text-xs text-emerald-300 font-mono"
+                      />
+                      <p className="text-[10px] font-mono text-slate-500 mt-1">
+                        Team members will receive a unique flag signature generated from this checkpoint template.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -893,6 +1012,56 @@ export default function AdminPanel({
               className="w-full bg-slate-900 border border-slate-800 rounded-lg p-3 text-xs text-cyan-300 font-mono focus:border-cyan-500 outline-none"
             />
             <p className="text-[10px] text-slate-500 font-mono">This message will instantly display in a banner across the entire platform for all active contestants.</p>
+          </div>
+
+          {/* Scoreboard Freeze & Live Timer Countdown Controls */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-800">
+            <div className="bg-slate-900/80 border border-slate-800 p-4 rounded-xl space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-mono font-bold text-cyan-300 uppercase flex items-center gap-1.5">
+                  <Lock className="w-4 h-4 text-cyan-400" />
+                  Scoreboard Freeze Control
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setEventConfig({ ...eventConfig, scoreboardFrozen: !eventConfig.scoreboardFrozen })}
+                  className={`px-3 py-1 rounded text-xs font-mono font-bold border ${
+                    eventConfig.scoreboardFrozen
+                      ? "bg-rose-500/20 text-rose-300 border-rose-500/60"
+                      : "bg-emerald-500/20 text-emerald-300 border-emerald-500/60"
+                  }`}
+                >
+                  {eventConfig.scoreboardFrozen ? "❄️ SCOREBOARD FROZEN" : "🟢 SCOREBOARD LIVE"}
+                </button>
+              </div>
+              <div>
+                <label className="block text-[10px] font-mono text-slate-400 mb-1">Freeze Notice Display Message</label>
+                <input
+                  type="text"
+                  value={eventConfig.freezeMessage || ""}
+                  onChange={(e) => setEventConfig({ ...eventConfig, freezeMessage: e.target.value })}
+                  placeholder="❄️ Scoreboard rankings are temporarily frozen for final validation."
+                  className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-xs text-white font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="bg-slate-900/80 border border-slate-800 p-4 rounded-xl space-y-3">
+              <label className="text-xs font-mono font-bold text-cyan-300 uppercase flex items-center gap-1.5">
+                <Clock className="w-4 h-4 text-cyan-400" />
+                Live Countdown Timer Settings
+              </label>
+              <div>
+                <label className="block text-[10px] font-mono text-slate-400 mb-1">Live Timer Banner Title</label>
+                <input
+                  type="text"
+                  value={eventConfig.liveTimerTitle || ""}
+                  onChange={(e) => setEventConfig({ ...eventConfig, liveTimerTitle: e.target.value })}
+                  placeholder="COMPETITION COUNTDOWN"
+                  className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-xs text-white font-mono"
+                />
+              </div>
+            </div>
           </div>
 
           <div className="pt-2">
@@ -1218,6 +1387,172 @@ export default function AdminPanel({
             teamName="ADMIN"
             isAdmin={true}
           />
+        </div>
+      )}
+
+      {/* TAB WRITEUPS: CTF WRITEUP & SOLUTION REVIEW PORTAL */}
+      {adminTab === "writeups" && (
+        <div className="bg-[#0e1424] border border-slate-800 rounded-xl p-6 space-y-6">
+          <div className="border-b border-slate-800 pb-4 flex items-center justify-between">
+            <div>
+              <h3 className="font-display font-bold text-lg text-white flex items-center gap-2">
+                <FileCode className="w-5 h-5 text-purple-400" />
+                CTF Writeup & Solution Portal (Admin Reviews)
+              </h3>
+              <p className="text-xs text-slate-400 font-mono mt-0.5">
+                Review player solution markdown reports. Approve high-quality writeups to award custom bonus points (+25 / +50 PTS).
+              </p>
+            </div>
+            <button
+              onClick={fetchWriteups}
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-mono text-slate-300 rounded cursor-pointer"
+            >
+              Refresh Writeups
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            {writeups.length === 0 ? (
+              <div className="p-8 text-center text-slate-500 font-mono text-xs border border-dashed border-slate-800 rounded-xl">
+                No writeup submissions pending review.
+              </div>
+            ) : (
+              writeups.map((w) => (
+                <div key={w.id} className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2 border-b border-slate-800/80 pb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-xs text-cyan-300 uppercase">{w.teamName}</span>
+                      <span className="text-xs text-slate-500">(@{w.username})</span>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-300">
+                        {w.challengeTitle}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
+                        w.status === 'approved' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' :
+                        w.status === 'rejected' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' :
+                        'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                      }`}>
+                        {w.status}
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-mono">
+                        {new Date(w.timestamp).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950 p-3 rounded border border-slate-800/80 text-xs text-slate-300 font-mono whitespace-pre-wrap max-h-48 overflow-y-auto">
+                    {w.content}
+                  </div>
+
+                  {w.status === 'pending' && (
+                    <div className="flex items-center justify-between flex-wrap gap-3 pt-2">
+                      <div className="flex items-center gap-2">
+                        <label className="text-[11px] font-mono text-slate-400">Bonus PTS:</label>
+                        <input
+                          type="number"
+                          value={reviewBonus}
+                          onChange={(e) => setReviewBonus(Number(e.target.value))}
+                          className="w-20 bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-emerald-400 font-mono font-bold"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Admin review comment..."
+                          value={reviewComment}
+                          onChange={(e) => setReviewComment(e.target.value)}
+                          className="bg-slate-950 border border-slate-800 rounded px-3 py-1 text-xs text-slate-300 font-mono w-48 sm:w-64"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleReviewWriteup(w.id, "approved")}
+                          className="px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded text-xs font-mono font-bold"
+                        >
+                          ✓ Approve (+Bonus PTS)
+                        </button>
+                        <button
+                          onClick={() => handleReviewWriteup(w.id, "rejected")}
+                          className="px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 rounded text-xs font-mono font-bold"
+                        >
+                          ✕ Reject
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB AUDIT: ACTIVITY AUDIT TRAIL & THREAT LOG */}
+      {adminTab === "audit" && (
+        <div className="bg-[#0e1424] border border-slate-800 rounded-xl p-6 space-y-6">
+          <div className="border-b border-slate-800 pb-4 flex items-center justify-between">
+            <div>
+              <h3 className="font-display font-bold text-lg text-white flex items-center gap-2">
+                <History className="w-5 h-5 text-rose-400" />
+                Team Activity Audit Trail & Threat Log
+              </h3>
+              <p className="text-xs text-slate-400 font-mono mt-0.5">
+                Real-time security telemetry logging flag captures, first bloods, hint unlocks, and writeup submissions.
+              </p>
+            </div>
+            <button
+              onClick={fetchAuditLogs}
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-mono text-slate-300 rounded cursor-pointer"
+            >
+              Refresh Audit Log
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-slate-800 text-[11px] font-mono text-slate-400 uppercase">
+                  <th className="p-3">Time</th>
+                  <th className="p-3">Team / User</th>
+                  <th className="p-3">Action Type</th>
+                  <th className="p-3">Details / Telemetry</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60 text-xs font-mono">
+                {auditLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="p-8 text-center text-slate-500">
+                      No telemetry logs recorded yet.
+                    </td>
+                  </tr>
+                ) : (
+                  auditLogs.map((log) => (
+                    <tr key={log.id} className="hover:bg-slate-900/40">
+                      <td className="p-3 text-slate-500 text-[11px]">
+                        {new Date(log.timestamp).toLocaleTimeString()}
+                      </td>
+                      <td className="p-3">
+                        <span className="font-bold text-cyan-300 uppercase">{log.teamName}</span>{" "}
+                        <span className="text-slate-500 text-[10px]">(@{log.username})</span>
+                      </td>
+                      <td className="p-3">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          log.action === "FIRST_BLOOD" ? "bg-rose-500/20 text-rose-300 border border-rose-500/40" :
+                          log.action === "FLAG_CAPTURED" ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40" :
+                          log.action === "WRITEUP_SUBMITTED" ? "bg-purple-500/20 text-purple-300 border border-purple-500/40" :
+                          "bg-slate-800 text-slate-300"
+                        }`}>
+                          {log.action}
+                        </span>
+                      </td>
+                      <td className="p-3 text-slate-300">
+                        {log.details}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

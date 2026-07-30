@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Shield, Terminal, Lock, User, ArrowRight, AlertTriangle, Key, Sparkles, CheckCircle2 } from "lucide-react";
+import { Escal8Logo } from "./Escal8Logo";
 
 interface LoginScreenProps {
   onAuthSuccess: (username: string, isAdmin: boolean, teamName?: string) => void;
@@ -85,8 +86,8 @@ export default function LoginScreen({ onAuthSuccess }: LoginScreenProps) {
 
         {/* Brand Header */}
         <div className="text-center mb-8 relative z-10">
-          <div className="w-16 h-16 bg-cyan-950/40 border border-cyan-500/30 rounded-2xl flex items-center justify-center mx-auto mb-4 text-cyan-400 shadow-lg shadow-cyan-500/5">
-            <Shield className="w-9 h-9 animate-pulse" />
+          <div className="w-20 h-20 flex items-center justify-center mx-auto mb-3">
+            <Escal8Logo className="w-20 h-20" glow={true} />
           </div>
           <h1 className="text-2xl font-display font-bold text-white tracking-tight flex items-center justify-center gap-2">
             ESCAL8 <span className="text-xs font-mono font-bold uppercase bg-cyan-950 text-cyan-400 px-2 py-0.5 rounded border border-cyan-800/40">CTF</span>
