@@ -7,13 +7,17 @@ interface LeaderboardProps {
   teamLeaderboard: TeamScore[];
   onRefresh: () => void;
   loading: boolean;
+  isFrozen?: boolean;
+  freezeMessage?: string;
 }
 
 export default function Leaderboard({ 
   userLeaderboard, 
   teamLeaderboard, 
   onRefresh, 
-  loading 
+  loading,
+  isFrozen = false,
+  freezeMessage = "🧊 SCOREBOARD FROZEN - Final Hour Hype Mode Active! Rankings are locked until competition end, but challenges remain active!"
 }: LeaderboardProps) {
   const [viewMode, setViewMode] = useState<"teams" | "users">("teams");
 
@@ -21,6 +25,15 @@ export default function Leaderboard({
 
   return (
     <div className="bg-cyber-card border border-slate-800 rounded-xl overflow-hidden shadow-xl" id="leaderboard-panel">
+      {/* Scoreboard Freeze Banner */}
+      {isFrozen && (
+        <div className="bg-gradient-to-r from-cyan-950 via-blue-900 to-indigo-950 border-b border-cyan-500/30 p-4 text-center text-cyan-200 font-mono text-xs font-bold flex items-center justify-center gap-2 animate-pulse">
+          <span className="text-base">🧊</span>
+          <span>{freezeMessage}</span>
+          <span className="text-base">🔒</span>
+        </div>
+      )}
+
       {/* Table Header Controls */}
       <div className="p-5 bg-slate-900/60 border-b border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>

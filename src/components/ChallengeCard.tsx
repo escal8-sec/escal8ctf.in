@@ -876,7 +876,7 @@ export default function ChallengeCard({
                           </div>
                         </div>
                         <div className="text-right text-cyan-400 font-bold">
-                          +{sub.pointsEarned} PTS
+                          +{sub.points} PTS
                         </div>
                       </div>
                     ))

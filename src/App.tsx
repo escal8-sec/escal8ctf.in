@@ -412,6 +412,8 @@ export default function App() {
                   teamLeaderboard={teamLeaderboard}
                   onRefresh={syncPlatformData}
                   loading={loading}
+                  isFrozen={Boolean(eventConfig?.scoreboardFrozen)}
+                  freezeMessage={eventConfig?.freezeMessage}
                 />
               </motion.div>
             )}

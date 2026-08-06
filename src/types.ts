@@ -52,10 +52,16 @@ export interface Submission {
 
 export interface User {
   username: string;
+  email?: string; // Gmail / Email address
   passwordHash: string; // stored securely or plaintext in this sandbox env
   isAdmin: boolean;
   teamName?: string;
+  isGroup?: boolean; // false for Individual, true for Group/Squad
   status?: 'active' | 'banned';
+  lastLoginTime?: string;
+  lastIp?: string;
+  lastUserAgent?: string;
+  createdAt?: string;
 }
 
 
@@ -85,6 +91,7 @@ export interface EventConfig {
   scoreboardFrozen?: boolean;
   freezeMessage?: string;
   liveTimerTitle?: string;
+  bannedIps?: string[];
 }
 
 export interface WriteupSubmission {

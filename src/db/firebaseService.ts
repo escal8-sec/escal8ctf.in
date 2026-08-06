@@ -102,6 +102,17 @@ export async function saveUserToFirestore(user: User): Promise<void> {
   }
 }
 
+export async function deleteUserFromFirestore(username: string): Promise<void> {
+  if (!dbInstance) return;
+  try {
+    const docRef = doc(dbInstance, "users", username);
+    await deleteDoc(docRef);
+    console.log(`[Firebase] Deleted user '${username}' from Firestore.`);
+  } catch (err) {
+    console.error(`[Firebase] Failed to delete user '${username}':`, err);
+  }
+}
+
 export async function saveAllUsersToFirestore(users: User[]): Promise<void> {
   if (!dbInstance) return;
   try {
@@ -140,3 +151,32 @@ export async function clearSubmissionsInFirestore(): Promise<void> {
     console.error("[Firebase] Failed to clear submissions:", err);
   }
 }
+
+export async function clearAllFirestoreData(): Promise<void> {
+  if (!dbInstance) return;
+  try {
+    const submissionsCol = collection(dbInstance, "submissions");
+    const usersCol = collection(dbInstance, "users");
+    
+    const [subSnap, userSnap] = await Promise.all([
+      getDocs(submissionsCol),
+      getDocs(usersCol)
+    ]);
+
+    const batch = writeBatch(dbInstance);
+    subSnap.docs.forEach(d => batch.delete(d.ref));
+    
+    // Delete non-admin users
+    userSnap.docs.forEach(d => {
+      if (d.id !== "escal8" && d.id !== "admin") {
+        batch.delete(d.ref);
+      }
+    });
+
+    await batch.commit();
+    console.log("[Firebase] Successfully reset Firestore data.");
+  } catch (err) {
+    console.error("[Firebase] Error resetting Firestore data:", err);
+  }
+}
+

@@ -11,9 +11,11 @@ import {
   saveAllChallengesToFirestore, 
   deleteChallengeFromFirestore, 
   saveUserToFirestore, 
+  deleteUserFromFirestore,
   saveAllUsersToFirestore, 
   saveSubmissionToFirestore, 
-  clearSubmissionsInFirestore 
+  clearSubmissionsInFirestore,
+  clearAllFirestoreData
 } from "./src/db/firebaseService.js";
 
 // Load environment variables
@@ -60,7 +62,7 @@ const DEFAULT_CHALLENGES: Challenge[] = [
       "Check your browser's inspect element -> Application -> Cookies panel.",
       "The vault expects `admin_session=true` or similar elevated value."
     ],
-    solvedCount: 3,
+    solvedCount: 0,
     author: "Z3r0_K00l",
     isLiveInstance: true,
     instanceConfig: {
@@ -85,7 +87,7 @@ const DEFAULT_CHALLENGES: Challenge[] = [
       "Single quotes close the existing SQL string query literal.",
       "Adding -- comment characters tells SQL to ignore the rest of the query checking the password."
     ],
-    solvedCount: 4,
+    solvedCount: 0,
     author: "D3n1_Hax",
     isLiveInstance: true,
     instanceConfig: {
@@ -112,7 +114,7 @@ const DEFAULT_CHALLENGES: Challenge[] = [
       "XOR is a reversible operation: Ciphertext ^ Key = Plaintext.",
       "You can write a simple Python script or use CyberChef with key 5f (hex)."
     ],
-    solvedCount: 2,
+    solvedCount: 0,
     author: "Crypt0_Maverick",
     files: [
       { name: "cipher_bytes.txt", content: "2a3c2c2e2336142c303d1531232d1f14302d33303c153c3d32303c", size: "54 Bytes" }
@@ -130,7 +132,7 @@ const DEFAULT_CHALLENGES: Challenge[] = [
       "A classical ROT cipher (Caesar cipher). Shifting 'L' backwards by 7 gets 'E'.",
       "Numbers and braces are not shifted."
     ],
-    solvedCount: 6,
+    solvedCount: 0,
     author: "Centurion_R0m"
   },
   {
@@ -765,6 +767,7 @@ interface EventConfig {
   scoreboardFrozen?: boolean;
   freezeMessage?: string;
   liveTimerTitle?: string;
+  bannedIps?: string[];
 }
 
 interface WriteupSubmissionRecord {
@@ -956,6 +959,61 @@ async function loadDatabase() {
   }
 }
 
+async function resetPlatformToFreshState() {
+  console.log("🧹 Resetting CTF platform test data to fresh initial state...");
+  
+  // Reset all challenge solved counts to 0 and instances to stopped
+  db.challenges = (db.challenges || DEFAULT_CHALLENGES).map(c => ({
+    ...c,
+    solvedCount: 0,
+    instanceConfig: c.instanceConfig ? { ...c.instanceConfig, status: 'stopped' as const } : undefined
+  }));
+
+  // Clear all submissions
+  db.submissions = [];
+
+  // Keep only the primary admin user 'escal8'
+  db.users = [
+    {
+      username: "escal8",
+      passwordHash: "ESCAL8@",
+      isAdmin: true,
+      teamName: "ADMIN",
+      status: "active",
+      createdAt: new Date().toISOString(),
+      lastLoginTime: new Date().toISOString()
+    }
+  ];
+
+  // Reset event configuration & clear all auxiliary records
+  db.eventConfig = {
+    status: 'active',
+    statusMessage: 'CTF Competition is Live',
+    announcement: '',
+    bannedIps: [],
+    scoreboardFrozen: false,
+    freezeMessage: ''
+  };
+  db.teamStatuses = [];
+  db.supportTickets = [];
+  db.unlockedHints = [];
+  db.publicChatMessages = [];
+  db.writeups = [];
+  db.auditLogs = [];
+
+  saveDatabase();
+
+  // Reset Firestore cloud persistence
+  try {
+    await clearAllFirestoreData();
+    await saveAllChallengesToFirestore(db.challenges);
+    await saveAllUsersToFirestore(db.users);
+    console.log("✅ [Platform Reset] Firestore & local database completely cleared and re-initialized!");
+  } catch (err) {
+    console.error("❌ Error resetting Firestore:", err);
+  }
+}
+
 // Load initially
 loadDatabase();
 
@@ -968,13 +1026,14 @@ app.use(express.json());
 
 // Register
 app.post("/api/auth/register", (req, res) => {
-  const { username, password, teamName } = req.body;
+  const { username, password, teamName, email, isGroup } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: "Username and password are required" });
   }
 
   const cleanUsername = username.trim().toLowerCase();
   const cleanPassword = password.trim();
+  const cleanEmail = email ? email.trim().toLowerCase() : undefined;
   // Default teamName to upper case of username if not provided, or clean trimmed string
   const cleanTeamName = teamName && teamName.trim() ? teamName.trim() : username.trim().toUpperCase();
 
@@ -985,22 +1044,46 @@ app.post("/api/auth/register", (req, res) => {
     return res.status(400).json({ error: "Password must be at least 4 characters" });
   }
 
-  const existing = db.users.find(u => u.username === cleanUsername);
-  if (existing) {
+  const existingByUsername = db.users.find(u => u.username === cleanUsername);
+  if (existingByUsername) {
+    if (existingByUsername.status === 'banned') {
+      return res.status(403).json({ error: "ACCESS DENIED: This account has been BANNED by the administrator." });
+    }
     return res.status(400).json({ error: "Username is already registered. Please login instead." });
+  }
+
+  if (cleanEmail) {
+    const existingByEmail = db.users.find(u => u.email && u.email.toLowerCase() === cleanEmail);
+    if (existingByEmail) {
+      if (existingByEmail.status === 'banned') {
+        return res.status(403).json({ error: "ACCESS DENIED: This Gmail / Email address has been BANNED by the administrator. You cannot register or login until unbanned." });
+      }
+      return res.status(400).json({ error: "This Gmail address is already registered. Please login instead." });
+    }
   }
 
   // Auto-promote "escal8", "admin", or users starting with admin to admin
   const isAdmin = cleanUsername === "escal8" || cleanUsername === "admin" || cleanUsername.startsWith("admin_");
 
+  const clientIp = getClientIp(req);
+  const clientUa = getClientUa(req);
+
   const newUser: User = {
     username: cleanUsername,
+    email: cleanEmail,
     passwordHash: cleanPassword,
     isAdmin,
-    teamName: cleanTeamName
+    teamName: cleanTeamName,
+    isGroup: Boolean(isGroup),
+    status: 'active',
+    createdAt: new Date().toISOString(),
+    lastLoginTime: new Date().toISOString(),
+    lastIp: clientIp,
+    lastUserAgent: clientUa
   };
 
   db.users.push(newUser);
+  logAudit("USER_REGISTERED", cleanTeamName, cleanUsername, `Operator registered (${cleanEmail || 'No Email'})`, clientIp);
   saveDatabase();
   saveUserToFirestore(newUser);
 
@@ -1009,7 +1092,9 @@ app.post("/api/auth/register", (req, res) => {
     message: "Registration successful!",
     username: newUser.username,
     isAdmin: newUser.isAdmin,
-    teamName: newUser.teamName
+    teamName: newUser.teamName,
+    email: newUser.email,
+    isGroup: newUser.isGroup
   });
 });
 
@@ -1020,10 +1105,20 @@ app.post("/api/auth/login", (req, res) => {
     return res.status(400).json({ error: "Username and password are required" });
   }
 
+  const clientIp = getClientIp(req);
+  const clientUa = getClientUa(req);
+
   const cleanUsername = username.trim().toLowerCase();
   const cleanPassword = password.trim();
 
-  let user = db.users.find(u => u.username === cleanUsername);
+  let user = db.users.find(u => u.username === cleanUsername || (u.email && u.email.toLowerCase() === cleanUsername));
+
+  // Check ban status immediately before any authentication
+  if (user && user.status === "banned") {
+    return res.status(403).json({
+      error: "ACCESS DENIED: This Gmail / Account has been BANNED by the administrator. You cannot login until an admin unbans your account."
+    });
+  }
 
   // Auto-provision or update admin accounts (escal8 or admin)
   if (cleanUsername === "escal8" || cleanUsername === "admin") {
@@ -1032,7 +1127,12 @@ app.post("/api/auth/login", (req, res) => {
         username: cleanUsername,
         passwordHash: cleanPassword,
         isAdmin: true,
-        teamName: "ADMIN"
+        teamName: "ADMIN",
+        status: "active",
+        createdAt: new Date().toISOString(),
+        lastLoginTime: new Date().toISOString(),
+        lastIp: clientIp,
+        lastUserAgent: clientUa
       };
       db.users.push(user);
       saveDatabase();
@@ -1041,6 +1141,9 @@ app.post("/api/auth/login", (req, res) => {
       // Update password to submitted password if logging in as admin/escal8
       user.passwordHash = cleanPassword;
       user.isAdmin = true;
+      user.lastLoginTime = new Date().toISOString();
+      user.lastIp = clientIp;
+      user.lastUserAgent = clientUa;
       saveDatabase();
       saveUserToFirestore(user);
     }
@@ -1050,12 +1153,110 @@ app.post("/api/auth/login", (req, res) => {
     return res.status(401).json({ error: "Invalid username or password" });
   }
 
+  user.lastLoginTime = new Date().toISOString();
+  user.lastIp = clientIp;
+  user.lastUserAgent = clientUa;
+  logAudit("USER_LOGIN", user.teamName || user.username.toUpperCase(), user.username, "Login successful", clientIp);
+  saveDatabase();
+  saveUserToFirestore(user);
+
   res.json({
     success: true,
     message: "Login successful!",
     username: user.username,
     isAdmin: user.isAdmin,
-    teamName: user.teamName || user.username.toUpperCase()
+    teamName: user.teamName || user.username.toUpperCase(),
+    email: user.email,
+    isGroup: user.isGroup,
+    status: user.status
+  });
+});
+
+// Admin User Directory & Immediate Ban / Unban Endpoints
+app.get("/api/admin/users", (req, res) => {
+  res.json(db.users.map(u => ({
+    username: u.username,
+    email: u.email || "",
+    isAdmin: u.isAdmin,
+    teamName: u.teamName || u.username.toUpperCase(),
+    isGroup: u.isGroup || false,
+    status: u.status || "active",
+    lastLoginTime: u.lastLoginTime || u.createdAt || new Date().toISOString(),
+    lastIp: u.lastIp || "127.0.0.1",
+    lastUserAgent: u.lastUserAgent || "Chrome / Web Desktop",
+    createdAt: u.createdAt || new Date().toISOString()
+  })));
+});
+
+app.post("/api/admin/users/action", (req, res) => {
+  const { username, email, action, reason } = req.body;
+  if (!action || (!username && !email)) {
+    return res.status(400).json({ error: "Missing required parameters: action and username/email" });
+  }
+
+  const user = db.users.find(u => 
+    (username && u.username.toLowerCase() === String(username).toLowerCase()) ||
+    (email && u.email && u.email.toLowerCase() === String(email).toLowerCase())
+  );
+
+  if (!user) {
+    return res.status(404).json({ error: "User not found" });
+  }
+
+  if (action === "delete") {
+    if (user.username === "escal8" || user.username === "admin" || user.isAdmin) {
+      return res.status(400).json({ error: "Protected admin accounts cannot be deleted." });
+    }
+    db.users = db.users.filter(u => u.username.toLowerCase() !== user.username.toLowerCase());
+    logAudit("USER_DELETED", user.teamName || user.username.toUpperCase(), user.username, `Account/Gmail (${user.email || user.username}) deleted by administrator`);
+    
+    saveDatabase();
+    deleteUserFromFirestore(user.username);
+
+    return res.json({
+      success: true,
+      message: `User '${user.username}' (${user.email || 'No Gmail'}) has been completely deleted!`
+    });
+  }
+
+  if (action === "ban") {
+    user.status = "banned";
+    logAudit("USER_BANNED", user.teamName || user.username.toUpperCase(), user.username, `Account/Gmail (${user.email || user.username}) banned: ${reason || "Suspicious activity detected"}`);
+  } else if (action === "unban") {
+    user.status = "active";
+    logAudit("USER_UNBANNED", user.teamName || user.username.toUpperCase(), user.username, `Account/Gmail (${user.email || user.username}) unbanned by administrator`);
+  } else {
+    return res.status(400).json({ error: "Invalid action. Use 'ban', 'unban', or 'delete'." });
+  }
+
+  // Also synchronize team status if applicable
+  if (user.teamName) {
+    let rec = (db.teamStatuses || []).find(st => st.teamName.toLowerCase() === user.teamName!.toLowerCase());
+    if (!rec) {
+      if (!db.teamStatuses) db.teamStatuses = [];
+      rec = { teamName: user.teamName, status: action === "ban" ? "banned" : "active", bonusPoints: 0 };
+      db.teamStatuses.push(rec);
+    } else {
+      rec.status = action === "ban" ? "banned" : "active";
+    }
+  }
+
+  saveDatabase();
+  saveUserToFirestore(user);
+
+  res.json({
+    success: true,
+    user: {
+      username: user.username,
+      email: user.email || "",
+      isAdmin: user.isAdmin,
+      teamName: user.teamName || user.username.toUpperCase(),
+      isGroup: user.isGroup || false,
+      status: user.status || "active",
+      lastLoginTime: user.lastLoginTime || user.createdAt || new Date().toISOString(),
+      createdAt: user.createdAt || new Date().toISOString()
+    },
+    message: `User '${user.username}' (${user.email || 'No Gmail'}) has been ${action === "ban" ? "banned" : "unbanned"} successfully!`
   });
 });
 
@@ -2495,6 +2696,17 @@ app.post("/api/submit", (req, res) => {
 
   // 1. Check CTF Event Status (Active, Paused, Ended)
   const currentEventConfig = db.eventConfig || { status: 'active' };
+
+  const clientIp = getClientIp(req);
+
+  // Check if Client IP is blacklisted
+  if (currentEventConfig.bannedIps && Array.isArray(currentEventConfig.bannedIps) && currentEventConfig.bannedIps.includes(clientIp)) {
+    return res.status(403).json({
+      success: false,
+      error: `🚨 ACCESS BLOCKED: Your IP address (${clientIp}) has been blacklisted by CTF Security Administrators.`
+    });
+  }
+
   if (currentEventConfig.status === 'paused') {
     return res.status(400).json({
       success: false,
@@ -2509,6 +2721,38 @@ app.post("/api/submit", (req, res) => {
   }
 
   const trimmedUsername = username.trim().toLowerCase();
+
+  // Anti-Cheat Brute Force Rate Limiter (10+ failed submissions within 10 seconds)
+  const now = Date.now();
+  const rateKey = `${trimmedUsername}:${clientIp}`;
+  let attempts = failedFlagAttemptsMap.get(rateKey) || [];
+  // Filter attempts in the last 10,000 ms (10 seconds)
+  attempts = attempts.filter(ts => now - ts < 10000);
+
+  if (attempts.length >= 10) {
+    // Auto-ban user for brute forcing flags
+    const userToBan = db.users.find(u => u.username === trimmedUsername);
+    if (userToBan && !userToBan.isAdmin) {
+      userToBan.status = "banned";
+      saveUserToFirestore(userToBan);
+    }
+    
+    logAudit(
+      "ANTI_CHEAT_BAN", 
+      userToBan?.teamName || trimmedUsername.toUpperCase(), 
+      trimmedUsername, 
+      `🚨 ANTI-CHEAT: Automatically banned operator '${trimmedUsername}' for submitting 10+ incorrect flags in under 10 seconds.`,
+      clientIp
+    );
+
+    saveDatabase();
+
+    return res.status(429).json({
+      success: false,
+      error: "🚨 ANTI-CHEAT SUSPENSION: You submitted 10+ incorrect flags within 10 seconds. Your account has been automatically suspended for brute-force automated testing."
+    });
+  }
+
   const chal = db.challenges.find(c => c.id === challengeId);
 
   if (!chal) {
@@ -2525,6 +2769,13 @@ app.post("/api/submit", (req, res) => {
 
   // Get user details to find teamName
   const userObj = db.users.find(u => u.username === trimmedUsername);
+  if (userObj && userObj.status === "banned") {
+    return res.status(403).json({
+      success: false,
+      error: "ACCESS DENIED: Your account has been BANNED by the administrator."
+    });
+  }
+
   const userTeam = userObj?.teamName || trimmedUsername.toUpperCase();
 
   // 3. Check if Team or User is Banned or Disqualified
@@ -2563,6 +2814,14 @@ app.post("/api/submit", (req, res) => {
     isCorrect = cleanSubmittedFlag === defaultDynamic || cleanSubmittedFlag === tmplDynamic;
   }
 
+  // Track failed submission timestamp if incorrect
+  if (!isCorrect) {
+    attempts.push(now);
+    failedFlagAttemptsMap.set(rateKey, attempts);
+  } else {
+    failedFlagAttemptsMap.delete(rateKey);
+  }
+
   // Check First Blood status (has anyone solved this challenge before?)
   let isFirstBlood = false;
   let earnedPoints = 0;
@@ -2584,6 +2843,18 @@ app.post("/api/submit", (req, res) => {
     if (isFirstBlood) {
       if (!db.eventConfig) db.eventConfig = { status: 'active' };
       db.eventConfig.announcement = `🩸 FIRST BLOOD! Team '${userTeam}' captured '${chal.title}' (+50 Bonus PTS)!`;
+
+      // Auto post to Public Chat as pinned announcement
+      if (!db.publicChatMessages) db.publicChatMessages = [];
+      db.publicChatMessages.push({
+        id: `pchat-fb-${Date.now()}`,
+        sender: "SYSTEM (ANNOUNCEMENT)",
+        teamName: userTeam,
+        message: `🩸 FIRST BLOOD! Team '${userTeam}' (Operator: @${trimmedUsername}) achieved First Blood on '${chal.title}' [+50 Bonus PTS]! 🎯`,
+        timestamp: new Date().toISOString(),
+        isAdmin: true,
+        isPinned: true
+      });
     }
   }
 
@@ -2612,7 +2883,8 @@ app.post("/api/submit", (req, res) => {
     isCorrect ? (isFirstBlood ? "FIRST_BLOOD" : "FLAG_CAPTURED") : "FLAG_FAILED",
     userTeam,
     trimmedUsername,
-    `${isCorrect ? "Solved" : "Failed attempt on"} '${chal.title}' (${isCorrect ? "+" + earnedPoints + " pts" : "invalid flag"})`
+    `${isCorrect ? "Solved" : "Failed attempt on"} '${chal.title}' (${isCorrect ? "+" + earnedPoints + " pts" : "invalid flag: " + cleanSubmittedFlag})`,
+    clientIp
   );
 
   saveDatabase();
@@ -2886,6 +3158,84 @@ app.post("/api/admin/teams/action", (req, res) => {
   res.json({ success: true, teamStatus: rec, message: `Team action '${action}' applied to '${teamName}'.` });
 });
 
+// IP Blacklist Management Endpoints
+app.post("/api/admin/ip/ban", (req, res) => {
+  const { ip, reason } = req.body;
+  if (!ip) return res.status(400).json({ error: "IP address required" });
+
+  if (!db.eventConfig) db.eventConfig = { status: "active" };
+  if (!db.eventConfig.bannedIps) db.eventConfig.bannedIps = [];
+
+  const cleanIp = ip.trim();
+  if (!db.eventConfig.bannedIps.includes(cleanIp)) {
+    db.eventConfig.bannedIps.push(cleanIp);
+  }
+
+  logAudit(
+    "IP_BLACKLISTED",
+    "ADMIN",
+    "admin_operator",
+    `🚨 IP ADDRESS BLACKLISTED: '${cleanIp}' (${reason || 'Manual Admin Ban'}). Access blocked.`,
+    cleanIp
+  );
+
+  saveDatabase();
+  res.json({ success: true, bannedIps: db.eventConfig.bannedIps, message: `IP '${cleanIp}' has been added to blacklist.` });
+});
+
+app.post("/api/admin/ip/unban", (req, res) => {
+  const { ip } = req.body;
+  if (!ip) return res.status(400).json({ error: "IP address required" });
+
+  if (!db.eventConfig) db.eventConfig = { status: "active" };
+  if (!db.eventConfig.bannedIps) db.eventConfig.bannedIps = [];
+
+  const cleanIp = ip.trim();
+  db.eventConfig.bannedIps = db.eventConfig.bannedIps.filter(item => item !== cleanIp);
+
+  logAudit(
+    "IP_UNBLACKLISTED",
+    "ADMIN",
+    "admin_operator",
+    `IP Address '${cleanIp}' removed from blacklist. Access restored.`,
+    cleanIp
+  );
+
+  saveDatabase();
+  res.json({ success: true, bannedIps: db.eventConfig.bannedIps, message: `IP '${cleanIp}' removed from blacklist.` });
+});
+
+// Emergency Global Broadcast Endpoint
+app.post("/api/admin/broadcast", (req, res) => {
+  const { message } = req.body;
+  if (!message) return res.status(400).json({ error: "Broadcast message text required" });
+
+  if (!db.eventConfig) db.eventConfig = { status: "active" };
+  db.eventConfig.announcement = message;
+
+  // Also post as pinned message in Public Chat
+  if (!db.publicChatMessages) db.publicChatMessages = [];
+  db.publicChatMessages.push({
+    id: `pchat-bcast-${Date.now()}`,
+    sender: "📢 CTF COMMAND (BROADCAST)",
+    teamName: "ADMIN",
+    message: message,
+    timestamp: new Date().toISOString(),
+    isAdmin: true,
+    isPinned: true
+  });
+
+  logAudit(
+    "EMERGENCY_BROADCAST",
+    "ADMIN",
+    "admin_operator",
+    `📢 Broadcast Pushed: "${message}"`
+  );
+
+  saveDatabase();
+  res.json({ success: true, message: "Emergency broadcast sent across all operator screens & pinned in chat!" });
+});
+
 // 13. System Database Backup & Import Endpoints
 app.get("/api/admin/backup", (req, res) => {
   res.setHeader("Content-Disposition", "attachment; filename=escal8_ctf_database_backup.json");
@@ -2910,6 +3260,22 @@ app.post("/api/admin/import", (req, res) => {
   saveDatabase();
   saveAllChallengesToFirestore(db.challenges);
   res.json({ success: true, message: "Database imported and synchronized successfully!" });
+});
+
+app.post("/api/admin/reset-platform", async (req, res) => {
+  try {
+    await resetPlatformToFreshState();
+    logAudit(
+      "PLATFORM_RESET",
+      "ADMIN",
+      "admin_operator",
+      "🧹 Full CTF Platform Reset executed by Admin. All test data cleared."
+    );
+    res.json({ success: true, message: "CTF platform data cleared and reset to fresh state successfully!" });
+  } catch (err: any) {
+    console.error("Error resetting platform:", err);
+    res.status(500).json({ error: "Failed to reset platform: " + (err?.message || err) });
+  }
 });
 
 // 14. Interactive Hint Purchase & Unlock Route
@@ -3093,8 +3459,30 @@ app.post("/api/chat/public/pin/:id", (req, res) => {
   res.json({ success: true, message: "Pin status updated" });
 });
 
+// Anti-Cheat Brute-Force Rate Limiting Map (key: username or ip -> timestamps)
+const failedFlagAttemptsMap = new Map<string, number[]>();
+
+// Helper functions to get client IP and User-Agent
+function getClientIp(req: express.Request): string {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string' && forwarded.length > 0) {
+    return forwarded.split(',')[0].trim();
+  }
+  return req.ip || req.socket?.remoteAddress || '127.0.0.1';
+}
+
+function getClientUa(req: express.Request): string {
+  const ua = req.headers['user-agent'];
+  if (!ua) return 'Unknown Device';
+  if (ua.includes('Chrome')) return 'Chrome / Chromium';
+  if (ua.includes('Firefox')) return 'Firefox';
+  if (ua.includes('Safari') && !ua.includes('Chrome')) return 'Safari';
+  if (ua.includes('Edge')) return 'Microsoft Edge';
+  return ua.slice(0, 40);
+}
+
 // Helper for Activity Audit Trail
-function logAudit(action: string, teamName: string, username: string, details: string) {
+function logAudit(action: string, teamName: string, username: string, details: string, ip?: string) {
   if (!db.auditLogs) db.auditLogs = [];
   db.auditLogs.unshift({
     id: `audit-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
@@ -3102,7 +3490,8 @@ function logAudit(action: string, teamName: string, username: string, details: s
     teamName,
     username,
     details,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    ip: ip || '127.0.0.1'
   });
   if (db.auditLogs.length > 500) {
     db.auditLogs = db.auditLogs.slice(0, 500);

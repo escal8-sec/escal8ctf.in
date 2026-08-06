@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Shield, Terminal, Lock, User, ArrowRight, AlertTriangle, Key, Sparkles, CheckCircle2 } from "lucide-react";
+import { Shield, Terminal, Lock, User, ArrowRight, AlertTriangle, Key, Sparkles, CheckCircle2, Mail, Users } from "lucide-react";
 import { Escal8Logo } from "./Escal8Logo";
 
 interface LoginScreenProps {
@@ -10,8 +10,10 @@ interface LoginScreenProps {
 export default function LoginScreen({ onAuthSuccess }: LoginScreenProps) {
   const [isRegistering, setIsRegistering] = useState(false);
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [teamName, setTeamName] = useState("");
+  const [isGroup, setIsGroup] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
@@ -24,6 +26,7 @@ export default function LoginScreen({ onAuthSuccess }: LoginScreenProps) {
     const cleanUsername = username.trim().toLowerCase();
     const cleanPassword = password.trim();
     const cleanTeamName = teamName.trim();
+    const cleanEmail = email.trim();
 
     if (!cleanUsername || !cleanPassword) {
       setError("Please fill out all operational fields.");
@@ -35,8 +38,8 @@ export default function LoginScreen({ onAuthSuccess }: LoginScreenProps) {
     try {
       const endpoint = isRegistering ? "/api/auth/register" : "/api/auth/login";
       const payload = isRegistering 
-        ? { username: cleanUsername, password: cleanPassword, teamName: cleanTeamName }
-        : { username: cleanUsername, password: cleanPassword };
+        ? { username: cleanUsername, password: cleanPassword, teamName: cleanTeamName, email: cleanEmail, isGroup }
+        : { username: cleanUsername, password: cleanPassword, email: cleanEmail };
 
       const response = await fetch(endpoint, {
         method: "POST",
@@ -101,7 +104,7 @@ export default function LoginScreen({ onAuthSuccess }: LoginScreenProps) {
         <form onSubmit={handleSubmit} className="space-y-4 relative z-10" id="auth-form">
           <div>
             <label className="block text-[11px] font-mono uppercase tracking-widest text-slate-400 mb-1.5">
-              Code Name / Username
+              Code Name / Username (or Gmail to Login)
             </label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
@@ -112,7 +115,25 @@ export default function LoginScreen({ onAuthSuccess }: LoginScreenProps) {
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="ENTER CODE NAME"
+                placeholder="ENTER CODE NAME OR GMAIL"
+                className="w-full bg-[#0b0f19] border border-slate-800 focus:border-cyan-500/80 px-10 py-2.5 rounded-xl text-sm font-mono focus:outline-none transition-colors text-slate-200"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-mono uppercase tracking-widest text-slate-400 mb-1.5">
+              Gmail / Email Address (Optional / Required for Admin Ban Recovery)
+            </label>
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
+                <Mail className="w-4 h-4" />
+              </span>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="operator@gmail.com"
                 className="w-full bg-[#0b0f19] border border-slate-800 focus:border-cyan-500/80 px-10 py-2.5 rounded-xl text-sm font-mono focus:outline-none transition-colors text-slate-200"
               />
             </div>
@@ -123,26 +144,62 @@ export default function LoginScreen({ onAuthSuccess }: LoginScreenProps) {
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
-              className="space-y-1.5"
+              className="space-y-3"
             >
-              <label className="block text-[11px] font-mono uppercase tracking-widest text-slate-400">
-                Team Name / Alliance (Optional)
-              </label>
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
-                  <Shield className="w-4 h-4" />
-                </span>
-                <input
-                  type="text"
-                  value={teamName}
-                  onChange={(e) => setTeamName(e.target.value)}
-                  placeholder="SOLO (OR ENTER TEAM NAME)"
-                  className="w-full bg-[#0b0f19] border border-slate-800 focus:border-cyan-500/80 px-10 py-2.5 rounded-xl text-sm font-mono focus:outline-none transition-colors text-slate-200"
-                />
+              <div>
+                <label className="block text-[11px] font-mono uppercase tracking-widest text-slate-400 mb-1.5">
+                  Participation Mode
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setIsGroup(false); setTeamName(""); }}
+                    className={`py-2 px-3 rounded-xl text-xs font-mono border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      !isGroup
+                        ? "bg-cyan-500/20 border-cyan-500 text-cyan-300 font-bold shadow-sm shadow-cyan-500/10"
+                        : "bg-[#0b0f19] border-slate-800 text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    <User className="w-3.5 h-3.5" />
+                    <span>Individual / Solo</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsGroup(true)}
+                    className={`py-2 px-3 rounded-xl text-xs font-mono border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      isGroup
+                        ? "bg-cyan-500/20 border-cyan-500 text-cyan-300 font-bold shadow-sm shadow-cyan-500/10"
+                        : "bg-[#0b0f19] border-slate-800 text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    <span>Group / Squad</span>
+                  </button>
+                </div>
               </div>
-              <p className="text-[10px] text-slate-500 font-mono">
-                Join others under the same Team Name to compete together! Defaults to Code Name if empty.
-              </p>
+
+              {isGroup && (
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-mono uppercase tracking-widest text-slate-400">
+                    Team Name / Alliance
+                  </label>
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
+                      <Shield className="w-4 h-4" />
+                    </span>
+                    <input
+                      type="text"
+                      value={teamName}
+                      onChange={(e) => setTeamName(e.target.value)}
+                      placeholder="ENTER GROUP / TEAM NAME"
+                      className="w-full bg-[#0b0f19] border border-slate-800 focus:border-cyan-500/80 px-10 py-2.5 rounded-xl text-sm font-mono focus:outline-none transition-colors text-slate-200"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-500 font-mono">
+                    Join others under the same Team Name to compete together as a Squad!
+                  </p>
+                </div>
+              )}
             </motion.div>
           )}
 

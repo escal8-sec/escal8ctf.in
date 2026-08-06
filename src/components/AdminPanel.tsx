@@ -5,7 +5,7 @@ import {
   Play, Square, RotateCcw, Clock, Activity, UploadCloud, Power,
   Users, UserX, UserCheck, DollarSign, Download, Upload, Megaphone,
   Filter, Search, Award, Lock, Unlock, Pause, PlayCircle, StopCircle,
-  MessageSquare
+  MessageSquare, Mail, User
 } from "lucide-react";
 import { Challenge, Submission, Category, EventConfig, TeamRecord, SupportTicket } from "../types";
 import SupportChat from "./SupportChat";
@@ -28,8 +28,12 @@ export default function AdminPanel({
   onInstanceAction
 }: AdminPanelProps) {
   // Main Sub-Tab State
-  const [adminTab, setAdminTab] = useState<"challenges" | "event" | "teams" | "telemetry" | "support" | "public_chat" | "writeups" | "audit" | "backup">("challenges");
+  const [adminTab, setAdminTab] = useState<"challenges" | "event" | "teams" | "users" | "telemetry" | "support" | "public_chat" | "writeups" | "audit" | "backup">("challenges");
   
+  // Users & Bans Directory State
+  const [users, setUsers] = useState<any[]>([]);
+  const [userSearchFilter, setUserSearchFilter] = useState("");
+
   // Support Tickets State
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
   const [selectedChatTeam, setSelectedChatTeam] = useState<string>("");
@@ -67,19 +71,175 @@ export default function AdminPanel({
   });
   const [eventSaveSuccess, setEventSaveSuccess] = useState("");
 
-  // Teams Moderation State
+  // Teams Moderation & IP Blacklist State
   const [teams, setTeams] = useState<TeamRecord[]>([]);
   const [pointsAdjustTeam, setPointsAdjustTeam] = useState<string | null>(null);
   const [adjustPointsDelta, setAdjustPointsDelta] = useState<number>(50);
   const [adjustReason, setAdjustReason] = useState("");
+  const [manualIpToBan, setManualIpToBan] = useState("");
+  const [auditActionFilter, setAuditActionFilter] = useState("ALL");
+  const [resetConfirming, setResetConfirming] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState("");
+
+  const handleResetPlatform = async () => {
+    try {
+      const res = await fetch("/api/admin/reset-platform", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+      if (res.ok) {
+        setResetSuccess("Platform successfully reset to fresh state! All test data removed.");
+        setResetConfirming(false);
+        onRefreshData();
+        fetchUsers();
+        fetchTeams();
+        fetchSupportTickets();
+        fetchWriteups();
+        fetchAuditLogs();
+        setTimeout(() => setResetSuccess(""), 5000);
+      } else {
+        alert("Failed to reset platform data.");
+      }
+    } catch (err) {
+      console.error("Error resetting platform:", err);
+      alert("Error resetting platform data.");
+    }
+  };
 
   useEffect(() => {
     fetchEventConfig();
     fetchTeams();
+    fetchUsers();
     fetchSupportTickets();
     fetchWriteups();
     fetchAuditLogs();
   }, []);
+
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch("/api/admin/users");
+      if (res.ok) {
+        const data = await res.json();
+        setUsers(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch users:", err);
+    }
+  };
+
+  const handleUserBanAction = async (userObj: any, action: "ban" | "unban") => {
+    try {
+      const res = await fetch("/api/admin/users/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: userObj.username,
+          email: userObj.email,
+          action,
+          reason: action === "ban" ? "Suspicious activity detected by Admin" : "Unbanned by Admin"
+        })
+      });
+      if (res.ok) {
+        await fetchUsers();
+        await fetchTeams();
+        onRefreshData();
+      }
+    } catch (err) {
+      console.error(`Failed to ${action} user:`, err);
+    }
+  };
+
+  const handleDeleteUser = async (userObj: any) => {
+    if (userObj.username === "escal8" || userObj.username === "admin" || userObj.isAdmin) {
+      alert("Admin accounts are protected and cannot be deleted.");
+      return;
+    }
+    if (!window.confirm(`Are you sure you want to REMOVE / DELETE operator account '@${userObj.username}' (${userObj.email || "No Gmail"})?\n\nThis will completely remove the account from the database. The user can register again if they want.`)) {
+      return;
+    }
+    try {
+      const res = await fetch("/api/admin/users/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: userObj.username,
+          email: userObj.email,
+          action: "delete",
+          reason: "User account deleted by Admin"
+        })
+      });
+      if (res.ok) {
+        await fetchUsers();
+        await fetchTeams();
+        onRefreshData();
+      } else {
+        const errData = await res.json();
+        alert(errData.error || "Failed to delete user.");
+      }
+    } catch (err) {
+      console.error("Failed to delete user:", err);
+      alert("Failed to delete user.");
+    }
+  };
+
+  const handleBanIp = async (ipToBan: string, reason?: string) => {
+    if (!ipToBan) return;
+    if (!window.confirm(`Are you sure you want to BLACKLIST IP address '${ipToBan}'? Access for all devices from this IP will be blocked.`)) return;
+    try {
+      const res = await fetch("/api/admin/ip/ban", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ip: ipToBan, reason: reason || "Admin Blacklist Action" })
+      });
+      if (res.ok) {
+        setManualIpToBan("");
+        await fetchEventConfig();
+        await fetchUsers();
+        await fetchAuditLogs();
+      }
+    } catch (err) {
+      console.error("Failed to ban IP:", err);
+    }
+  };
+
+  const handleUnbanIp = async (ipToUnban: string) => {
+    try {
+      const res = await fetch("/api/admin/ip/unban", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ip: ipToUnban })
+      });
+      if (res.ok) {
+        await fetchEventConfig();
+        await fetchUsers();
+        await fetchAuditLogs();
+      }
+    } catch (err) {
+      console.error("Failed to unban IP:", err);
+    }
+  };
+
+  const handleBroadcastNow = async () => {
+    if (!eventConfig.announcement) {
+      alert("Please enter a broadcast announcement message.");
+      return;
+    }
+    try {
+      const res = await fetch("/api/admin/broadcast", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: eventConfig.announcement })
+      });
+      if (res.ok) {
+        setEventSaveSuccess("📢 Emergency Broadcast Pushed & Pinned in Public Chat Room!");
+        setTimeout(() => setEventSaveSuccess(""), 4000);
+        await fetchEventConfig();
+        await fetchAuditLogs();
+      }
+    } catch (err) {
+      console.error("Failed to send broadcast:", err);
+    }
+  };
 
   const fetchWriteups = async () => {
     try {
@@ -482,6 +642,21 @@ export default function AdminPanel({
         >
           <Users className="w-4 h-4" />
           <span>Team Moderation ({teams.length})</span>
+        </button>
+
+        <button
+          onClick={() => {
+            setAdminTab("users");
+            fetchUsers();
+          }}
+          className={`px-4 py-2.5 rounded-lg text-xs font-mono font-bold flex items-center gap-2 cursor-pointer transition-all ${
+            adminTab === "users"
+              ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40"
+              : "text-slate-400 hover:text-white"
+          }`}
+        >
+          <UserCheck className="w-4 h-4 text-cyan-400" />
+          <span>User Directory & Bans ({users.length})</span>
         </button>
 
         <button
@@ -1002,16 +1177,26 @@ export default function AdminPanel({
           <div className="space-y-2 pt-2">
             <label className="block text-xs font-mono text-slate-400 flex items-center gap-1.5 font-bold uppercase">
               <Megaphone className="w-4 h-4 text-cyan-400" />
-              Global Operator Announcement Banner
+              Global Emergency Announcement & Broadcast
             </label>
-            <input
-              type="text"
-              value={eventConfig.announcement || ""}
-              onChange={(e) => setEventConfig({ ...eventConfig, announcement: e.target.value })}
-              placeholder="e.g. 📢 HINT RELEASED: Check Cryptography Vector #3! 15 minutes remaining!"
-              className="w-full bg-slate-900 border border-slate-800 rounded-lg p-3 text-xs text-cyan-300 font-mono focus:border-cyan-500 outline-none"
-            />
-            <p className="text-[10px] text-slate-500 font-mono">This message will instantly display in a banner across the entire platform for all active contestants.</p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={eventConfig.announcement || ""}
+                onChange={(e) => setEventConfig({ ...eventConfig, announcement: e.target.value })}
+                placeholder="e.g. 📢 HINT RELEASED: Check Cryptography Vector #3! 15 minutes remaining!"
+                className="flex-1 bg-slate-900 border border-slate-800 rounded-lg p-3 text-xs text-cyan-300 font-mono focus:border-cyan-500 outline-none"
+              />
+              <button
+                type="button"
+                onClick={handleBroadcastNow}
+                className="px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-[#0b0f19] text-xs font-mono font-bold rounded-lg shadow-md flex items-center gap-1.5 shrink-0 cursor-pointer"
+              >
+                <Megaphone className="w-4 h-4" />
+                <span>Push Broadcast</span>
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-500 font-mono">This message will instantly display in a banner across the entire platform and get pinned in the Public Chat Room.</p>
           </div>
 
           {/* Scoreboard Freeze & Live Timer Countdown Controls */}
@@ -1064,14 +1249,52 @@ export default function AdminPanel({
             </div>
           </div>
 
-          <div className="pt-2">
+          <div className="pt-2 flex flex-wrap items-center justify-between gap-4 border-t border-slate-800">
             <button
               onClick={() => handleSaveEventConfig()}
               className="px-6 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-[#0b0f19] text-xs font-mono font-bold rounded-lg shadow-md shadow-cyan-500/20 cursor-pointer"
             >
               Save Event Settings & Broadcast
             </button>
+
+            {/* Clear Test Data & Reset Platform Action */}
+            <div className="bg-rose-950/30 border border-rose-800/50 p-3 rounded-xl flex items-center gap-3">
+              <div>
+                <span className="text-xs font-mono font-bold text-rose-300 block">🧹 Reset Platform Data</span>
+                <span className="text-[10px] text-slate-400 font-mono">Wipe all submissions, non-admin users, and reset challenge stats to fresh launch state.</span>
+              </div>
+              {resetConfirming ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleResetPlatform}
+                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-mono font-bold text-xs rounded cursor-pointer"
+                  >
+                    Confirm Wipe
+                  </button>
+                  <button
+                    onClick={() => setResetConfirming(false)}
+                    className="px-2.5 py-1.5 bg-slate-800 text-slate-400 font-mono text-xs rounded cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setResetConfirming(true)}
+                  className="px-3 py-1.5 bg-rose-950 hover:bg-rose-900 border border-rose-700/80 text-rose-300 font-mono font-bold text-xs rounded cursor-pointer shrink-0"
+                >
+                  Clear Test Data
+                </button>
+              )}
+            </div>
           </div>
+
+          {resetSuccess && (
+            <div className="p-3 bg-emerald-950/60 border border-emerald-500/60 text-emerald-300 text-xs font-mono rounded-lg flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <span>{resetSuccess}</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -1227,6 +1450,254 @@ export default function AdminPanel({
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB: USER DIRECTORY & IMMEDIATE BANS */}
+      {adminTab === "users" && (
+        <div className="bg-[#0e1424] border border-slate-800 rounded-xl p-6 space-y-4">
+          <div className="border-b border-slate-800 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="font-display font-bold text-lg text-white flex items-center gap-2">
+                <UserCheck className="w-5 h-5 text-cyan-400" />
+                User Directory & Login Activity Logs (Ban / Unban Control)
+              </h3>
+              <p className="text-xs text-slate-400 font-mono mt-1">
+                Immediate ban/unban of operators. When banned, an operator cannot login with their Gmail/Username until unbanned.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search username or gmail..."
+                  value={userSearchFilter}
+                  onChange={(e) => setUserSearchFilter(e.target.value)}
+                  className="bg-[#0b0f19] border border-slate-800 focus:border-cyan-500 text-xs font-mono px-8 py-1.5 rounded-lg text-white w-48 focus:outline-none"
+                />
+              </div>
+              <button
+                onClick={fetchUsers}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-400 text-xs font-mono rounded-lg transition-colors cursor-pointer"
+              >
+                Refresh List
+              </button>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-slate-800 text-[10px] font-mono text-slate-400 uppercase tracking-wider">
+                  <th className="p-3">Status</th>
+                  <th className="p-3">Code Name / Username</th>
+                  <th className="p-3">Gmail / Email Address</th>
+                  <th className="p-3">Client IP & Device</th>
+                  <th className="p-3">Participation Type</th>
+                  <th className="p-3">Last Login Time</th>
+                  <th className="p-3 text-right">Moderation & Removal Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60 font-mono text-xs">
+                {(() => {
+                  // Compute IP frequency to detect multiple accounts on same IP
+                  const ipCounts: Record<string, number> = {};
+                  users.forEach(u => {
+                    if (u.lastIp && u.lastIp !== "127.0.0.1") {
+                      ipCounts[u.lastIp] = (ipCounts[u.lastIp] || 0) + 1;
+                    }
+                  });
+
+                  const filteredUsers = users.filter(u => 
+                    !userSearchFilter || 
+                    u.username.toLowerCase().includes(userSearchFilter.toLowerCase()) || 
+                    (u.email && u.email.toLowerCase().includes(userSearchFilter.toLowerCase())) ||
+                    (u.lastIp && u.lastIp.includes(userSearchFilter))
+                  );
+
+                  if (filteredUsers.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={7} className="p-8 text-center text-slate-500 font-mono">
+                          No operators matching current search filter.
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return filteredUsers.map((u) => {
+                    const isBanned = u.status === "banned";
+                    const isAdminUser = u.isAdmin || u.username === "escal8" || u.username === "admin";
+                    const userIp = u.lastIp || "127.0.0.1";
+                    const sharedCount = ipCounts[userIp] || 0;
+
+                    return (
+                      <tr key={u.username} className="hover:bg-slate-900/40 transition-colors">
+                        <td className="p-3">
+                          {isBanned ? (
+                            <span className="bg-rose-950 text-rose-400 border border-rose-800/60 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 w-fit">
+                              <XCircle className="w-3 h-3" />
+                              BANNED
+                            </span>
+                          ) : (
+                            <span className="bg-emerald-950 text-emerald-400 border border-emerald-800/60 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 w-fit">
+                              <CheckCircle2 className="w-3 h-3" />
+                              ACTIVE
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3 font-bold text-white uppercase flex items-center gap-1.5">
+                          <User className="w-3.5 h-3.5 text-cyan-400" />
+                          <span>{u.username}</span>
+                          {isAdminUser && (
+                            <span className="bg-cyan-950 text-cyan-300 border border-cyan-800/40 text-[9px] px-1.5 py-0.5 rounded uppercase">
+                              ADMIN
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3 text-slate-300">
+                          {u.email ? (
+                            <span className="flex items-center gap-1 text-cyan-300">
+                              <Mail className="w-3.5 h-3.5 text-slate-400" />
+                              {u.email}
+                            </span>
+                          ) : (
+                            <span className="text-slate-500 italic">No Gmail Recorded</span>
+                          )}
+                        </td>
+                        <td className="p-3 text-slate-300">
+                          <div className="space-y-1">
+                            <div className="font-mono text-[11px] text-cyan-400 flex items-center gap-1.5 flex-wrap">
+                              <span>🌐 {userIp}</span>
+                              {sharedCount > 1 && (
+                                <span className="text-[9px] bg-amber-950/90 text-amber-300 border border-amber-800/80 px-1.5 py-0.2 rounded font-bold" title="Multiple accounts logged in from this same IP address">
+                                  ⚠️ SHARED IP ({sharedCount} accounts)
+                                </span>
+                              )}
+                              {userIp !== "127.0.0.1" && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleBanIp(userIp, `Blacklisted from user directory for operator @${u.username}`)}
+                                  className="text-[9px] bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800/60 px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+                                >
+                                  🚫 Ban IP
+                                </button>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-slate-500 truncate max-w-[150px]" title={u.lastUserAgent || "Web Browser"}>
+                              💻 {u.lastUserAgent || "Web Browser"}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          {u.isGroup ? (
+                            <span className="bg-purple-950/80 text-purple-300 border border-purple-800/40 px-2 py-0.5 rounded text-[10px] uppercase font-bold">
+                              GROUP / SQUAD ({u.teamName})
+                            </span>
+                          ) : (
+                            <span className="bg-blue-950/80 text-blue-300 border border-blue-800/40 px-2 py-0.5 rounded text-[10px] uppercase font-bold">
+                              INDIVIDUAL / SOLO
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3 text-slate-400 text-[11px]">
+                          {u.lastLoginTime ? new Date(u.lastLoginTime).toLocaleString() : "Never / Initial"}
+                        </td>
+                        <td className="p-3 text-right">
+                          {isAdminUser ? (
+                            <span className="text-slate-500 text-[10px] italic">Admin Protected</span>
+                          ) : (
+                            <div className="flex items-center justify-end gap-2">
+                              {isBanned ? (
+                                <button
+                                  onClick={() => handleUserBanAction(u, "unban")}
+                                  className="px-2.5 py-1 bg-emerald-950 hover:bg-emerald-900 border border-emerald-700/60 text-emerald-300 text-xs font-bold rounded-lg cursor-pointer transition-all shadow-sm"
+                                >
+                                  Unban
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handleUserBanAction(u, "ban")}
+                                  className="px-2.5 py-1 bg-rose-950 hover:bg-rose-900 border border-rose-700/60 text-rose-300 text-xs font-bold rounded-lg cursor-pointer transition-all shadow-sm"
+                                >
+                                  Ban
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleDeleteUser(u)}
+                                className="px-2.5 py-1 bg-red-950/80 hover:bg-red-900 border border-red-700/80 text-red-300 text-xs font-bold rounded-lg cursor-pointer transition-all shadow-sm flex items-center gap-1"
+                                title="Delete user account permanently"
+                              >
+                                <Trash2 className="w-3 h-3 text-red-400" />
+                                Remove
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()}
+              </tbody>
+            </table>
+          </div>
+
+          {/* IP Blacklist Manager Card */}
+          <div className="mt-6 pt-6 border-t border-slate-800 bg-slate-900/80 border border-slate-800 rounded-xl p-5 space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <h4 className="font-mono font-bold text-sm text-rose-400 flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-rose-400" />
+                  IP Subnet & Device Blacklist Manager
+                </h4>
+                <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                  Blacklisted IP addresses are immediately blocked from flag submissions, registration, and logins.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="e.g. 192.168.1.105"
+                  value={manualIpToBan}
+                  onChange={(e) => setManualIpToBan(e.target.value)}
+                  className="bg-slate-950 border border-slate-800 text-xs font-mono px-3 py-1.5 rounded-lg text-white w-44 focus:border-rose-500 outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleBanIp(manualIpToBan, "Manual IP Blacklist Entry")}
+                  className="px-3 py-1.5 bg-rose-950 hover:bg-rose-900 border border-rose-700/60 text-rose-300 text-xs font-mono font-bold rounded-lg cursor-pointer"
+                >
+                  + Add IP to Blacklist
+                </button>
+              </div>
+            </div>
+
+            {/* Blacklisted IPs List */}
+            <div className="flex flex-wrap gap-2 pt-2">
+              {(!eventConfig.bannedIps || eventConfig.bannedIps.length === 0) ? (
+                <div className="text-xs text-slate-500 font-mono italic">
+                  No IP addresses currently blacklisted.
+                </div>
+              ) : (
+                eventConfig.bannedIps.map((bannedIp) => (
+                  <div
+                    key={bannedIp}
+                    className="bg-rose-950/80 border border-rose-800/80 text-rose-200 px-3 py-1 rounded-lg text-xs font-mono flex items-center gap-2"
+                  >
+                    <span>🚫 {bannedIp}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleUnbanIp(bannedIp)}
+                      className="text-[10px] text-slate-400 hover:text-white underline cursor-pointer ml-1"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -1489,14 +1960,14 @@ export default function AdminPanel({
       {/* TAB AUDIT: ACTIVITY AUDIT TRAIL & THREAT LOG */}
       {adminTab === "audit" && (
         <div className="bg-[#0e1424] border border-slate-800 rounded-xl p-6 space-y-6">
-          <div className="border-b border-slate-800 pb-4 flex items-center justify-between">
+          <div className="border-b border-slate-800 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div>
               <h3 className="font-display font-bold text-lg text-white flex items-center gap-2">
                 <History className="w-5 h-5 text-rose-400" />
                 Team Activity Audit Trail & Threat Log
               </h3>
               <p className="text-xs text-slate-400 font-mono mt-0.5">
-                Real-time security telemetry logging flag captures, first bloods, hint unlocks, and writeup submissions.
+                Real-time security telemetry logging flag captures, first bloods, anti-cheat bans, and IP blacklists.
               </p>
             </div>
             <button
@@ -1507,25 +1978,54 @@ export default function AdminPanel({
             </button>
           </div>
 
+          {/* Action Filter Pills */}
+          <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
+            <span className="text-slate-500 text-[11px] font-bold uppercase flex items-center gap-1">
+              <Filter className="w-3.5 h-3.5 text-slate-400" /> Filter:
+            </span>
+            {["ALL", "ANTI_CHEAT_BAN", "FIRST_BLOOD", "FLAG_CAPTURED", "FLAG_FAILED", "USER_LOGIN", "IP_BLACKLISTED"].map((act) => (
+              <button
+                key={act}
+                onClick={() => setAuditActionFilter(act)}
+                className={`px-2.5 py-1 rounded text-[11px] font-bold border transition-colors cursor-pointer ${
+                  auditActionFilter === act
+                    ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/60"
+                    : "bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-700"
+                }`}
+              >
+                {act}
+              </button>
+            ))}
+          </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-800 text-[11px] font-mono text-slate-400 uppercase">
                   <th className="p-3">Time</th>
                   <th className="p-3">Team / User</th>
+                  <th className="p-3">Client IP</th>
                   <th className="p-3">Action Type</th>
                   <th className="p-3">Details / Telemetry</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-xs font-mono">
-                {auditLogs.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="p-8 text-center text-slate-500">
-                      No telemetry logs recorded yet.
-                    </td>
-                  </tr>
-                ) : (
-                  auditLogs.map((log) => (
+                {(() => {
+                  const filtered = auditLogs.filter(log => 
+                    auditActionFilter === "ALL" || log.action === auditActionFilter
+                  );
+
+                  if (filtered.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={5} className="p-8 text-center text-slate-500">
+                          No telemetry logs matching filter '{auditActionFilter}'.
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return filtered.map((log) => (
                     <tr key={log.id} className="hover:bg-slate-900/40">
                       <td className="p-3 text-slate-500 text-[11px]">
                         {new Date(log.timestamp).toLocaleTimeString()}
@@ -1534,11 +2034,16 @@ export default function AdminPanel({
                         <span className="font-bold text-cyan-300 uppercase">{log.teamName}</span>{" "}
                         <span className="text-slate-500 text-[10px]">(@{log.username})</span>
                       </td>
+                      <td className="p-3 text-cyan-400 text-[11px]">
+                        {log.ip || "127.0.0.1"}
+                      </td>
                       <td className="p-3">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                           log.action === "FIRST_BLOOD" ? "bg-rose-500/20 text-rose-300 border border-rose-500/40" :
+                          log.action === "ANTI_CHEAT_BAN" ? "bg-red-600/30 text-red-200 border border-red-500/60 animate-pulse" :
                           log.action === "FLAG_CAPTURED" ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40" :
                           log.action === "WRITEUP_SUBMITTED" ? "bg-purple-500/20 text-purple-300 border border-purple-500/40" :
+                          log.action === "IP_BLACKLISTED" ? "bg-red-950 text-red-300 border border-red-800/60" :
                           "bg-slate-800 text-slate-300"
                         }`}>
                           {log.action}
@@ -1548,8 +2053,8 @@ export default function AdminPanel({
                         {log.details}
                       </td>
                     </tr>
-                  ))
-                )}
+                  ));
+                })()}
               </tbody>
             </table>
           </div>
