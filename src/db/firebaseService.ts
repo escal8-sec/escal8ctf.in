@@ -1,5 +1,6 @@
 import { initializeApp, getApps } from "firebase/app";
 import { getFirestore, collection, getDocs, doc, setDoc, deleteDoc, writeBatch } from "firebase/firestore";
+import { getAuth, signInAnonymously } from "firebase/auth";
 import fs from "fs";
 import path from "path";
 import { Challenge, Submission, User } from "../types.js";
@@ -16,14 +17,28 @@ if (fs.existsSync(configPath)) {
 }
 
 let dbInstance: ReturnType<typeof getFirestore> | null = null;
+let authInstance: ReturnType<typeof getAuth> | null = null;
 
 if (firebaseConfig && firebaseConfig.projectId) {
   try {
     const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
     dbInstance = getFirestore(app, firebaseConfig.firestoreDatabaseId || undefined);
-    console.log("[Firebase] Successfully initialized Firestore with database ID:", firebaseConfig.firestoreDatabaseId);
+    authInstance = getAuth(app);
+    console.log("[Firebase] Successfully initialized Firestore and Auth with database ID:", firebaseConfig.firestoreDatabaseId);
   } catch (err) {
     console.error("[Firebase] Error initializing Firebase:", err);
+  }
+}
+
+async function ensureAuthenticated(): Promise<void> {
+  if (!authInstance) return;
+  if (!authInstance.currentUser) {
+    try {
+      await signInAnonymously(authInstance);
+      console.log("[Firebase] Backend service signed in via Firebase Auth.");
+    } catch (err) {
+      console.error("[Firebase] Auth sign-in failed:", err);
+    }
   }
 }
 
@@ -35,6 +50,7 @@ export async function fetchAllFromFirestore(): Promise<{
   if (!dbInstance) return null;
 
   try {
+    await ensureAuthenticated();
     const challengesCol = collection(dbInstance, "challenges");
     const submissionsCol = collection(dbInstance, "submissions");
     const usersCol = collection(dbInstance, "users");
@@ -59,6 +75,7 @@ export async function fetchAllFromFirestore(): Promise<{
 export async function saveChallengeToFirestore(challenge: Challenge): Promise<void> {
   if (!dbInstance) return;
   try {
+    await ensureAuthenticated();
     const docRef = doc(dbInstance, "challenges", challenge.id);
     await setDoc(docRef, JSON.parse(JSON.stringify(challenge)), { merge: true });
     console.log(`[Firebase] Saved challenge '${challenge.id}' to Firestore.`);
@@ -70,6 +87,7 @@ export async function saveChallengeToFirestore(challenge: Challenge): Promise<vo
 export async function saveAllChallengesToFirestore(challenges: Challenge[]): Promise<void> {
   if (!dbInstance) return;
   try {
+    await ensureAuthenticated();
     for (const c of challenges) {
       const docRef = doc(dbInstance, "challenges", c.id);
       await setDoc(docRef, JSON.parse(JSON.stringify(c)), { merge: true });
@@ -83,6 +101,7 @@ export async function saveAllChallengesToFirestore(challenges: Challenge[]): Pro
 export async function deleteChallengeFromFirestore(challengeId: string): Promise<void> {
   if (!dbInstance) return;
   try {
+    await ensureAuthenticated();
     const docRef = doc(dbInstance, "challenges", challengeId);
     await deleteDoc(docRef);
     console.log(`[Firebase] Deleted challenge '${challengeId}' from Firestore.`);
@@ -94,6 +113,7 @@ export async function deleteChallengeFromFirestore(challengeId: string): Promise
 export async function saveUserToFirestore(user: User): Promise<void> {
   if (!dbInstance) return;
   try {
+    await ensureAuthenticated();
     const docRef = doc(dbInstance, "users", user.username);
     await setDoc(docRef, JSON.parse(JSON.stringify(user)), { merge: true });
     console.log(`[Firebase] Saved user '${user.username}' to Firestore.`);
@@ -105,6 +125,7 @@ export async function saveUserToFirestore(user: User): Promise<void> {
 export async function deleteUserFromFirestore(username: string): Promise<void> {
   if (!dbInstance) return;
   try {
+    await ensureAuthenticated();
     const docRef = doc(dbInstance, "users", username);
     await deleteDoc(docRef);
     console.log(`[Firebase] Deleted user '${username}' from Firestore.`);
@@ -116,6 +137,7 @@ export async function deleteUserFromFirestore(username: string): Promise<void> {
 export async function saveAllUsersToFirestore(users: User[]): Promise<void> {
   if (!dbInstance) return;
   try {
+    await ensureAuthenticated();
     for (const u of users) {
       const docRef = doc(dbInstance, "users", u.username);
       await setDoc(docRef, JSON.parse(JSON.stringify(u)), { merge: true });
@@ -128,6 +150,7 @@ export async function saveAllUsersToFirestore(users: User[]): Promise<void> {
 export async function saveSubmissionToFirestore(submission: Submission): Promise<void> {
   if (!dbInstance) return;
   try {
+    await ensureAuthenticated();
     const docRef = doc(dbInstance, "submissions", submission.id);
     await setDoc(docRef, JSON.parse(JSON.stringify(submission)));
     console.log(`[Firebase] Saved submission '${submission.id}' to Firestore.`);
@@ -139,6 +162,7 @@ export async function saveSubmissionToFirestore(submission: Submission): Promise
 export async function clearSubmissionsInFirestore(): Promise<void> {
   if (!dbInstance) return;
   try {
+    await ensureAuthenticated();
     const submissionsCol = collection(dbInstance, "submissions");
     const subSnap = await getDocs(submissionsCol);
     const batch = writeBatch(dbInstance);
@@ -155,6 +179,7 @@ export async function clearSubmissionsInFirestore(): Promise<void> {
 export async function clearAllFirestoreData(): Promise<void> {
   if (!dbInstance) return;
   try {
+    await ensureAuthenticated();
     const submissionsCol = collection(dbInstance, "submissions");
     const usersCol = collection(dbInstance, "users");
     

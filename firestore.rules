@@ -1,8 +1,12 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Only allow access to authenticated users (e.g. verified backend service with Firebase Auth)
+    // Direct unauthenticated public requests to Firestore are forbidden.
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if request.auth != null;
     }
   }
 }
+
+

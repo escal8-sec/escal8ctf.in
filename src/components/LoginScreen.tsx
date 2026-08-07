@@ -4,7 +4,7 @@ import { Shield, Terminal, Lock, User, ArrowRight, AlertTriangle, Key, Sparkles,
 import { Escal8Logo } from "./Escal8Logo";
 
 interface LoginScreenProps {
-  onAuthSuccess: (username: string, isAdmin: boolean, teamName?: string) => void;
+  onAuthSuccess: (username: string, isAdmin: boolean, teamName?: string, userId?: string, teamId?: string, isGroup?: boolean) => void;
 }
 
 export default function LoginScreen({ onAuthSuccess }: LoginScreenProps) {
@@ -60,11 +60,16 @@ export default function LoginScreen({ onAuthSuccess }: LoginScreenProps) {
         throw new Error(data.error || "Authentication handshake failure.");
       }
 
-      setSuccess(isRegistering ? "Enlistment verified. Logging you in..." : "Credentials accepted. Command access granted.");
+      const defaultMsg = isRegistering ? "Enlistment verified. Logging you in..." : "Credentials accepted. Command access granted.";
+      setSuccess(data.message || defaultMsg);
+      
+      if (data.adminToken) {
+        localStorage.setItem("escal8_admin_token", data.adminToken);
+      }
       
       // Delay briefly to allow the success state to animate beautifully
       setTimeout(() => {
-        onAuthSuccess(data.username, data.isAdmin, data.teamName);
+        onAuthSuccess(data.username, data.isAdmin, data.teamName, data.id, data.teamId, data.isGroup);
       }, 1000);
 
     } catch (err: any) {
@@ -181,7 +186,7 @@ export default function LoginScreen({ onAuthSuccess }: LoginScreenProps) {
               {isGroup && (
                 <div className="space-y-1.5">
                   <label className="block text-[11px] font-mono uppercase tracking-widest text-slate-400">
-                    Team Name / Alliance
+                    Team Name or Team ID (Create or Join)
                   </label>
                   <div className="relative">
                     <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
@@ -191,12 +196,13 @@ export default function LoginScreen({ onAuthSuccess }: LoginScreenProps) {
                       type="text"
                       value={teamName}
                       onChange={(e) => setTeamName(e.target.value)}
-                      placeholder="ENTER GROUP / TEAM NAME"
+                      placeholder="ENTER GROUP NAME OR TEAM ID (e.g. TEAM-7K93)"
                       className="w-full bg-[#0b0f19] border border-slate-800 focus:border-cyan-500/80 px-10 py-2.5 rounded-xl text-sm font-mono focus:outline-none transition-colors text-slate-200"
                     />
                   </div>
-                  <p className="text-[10px] text-slate-500 font-mono">
-                    Join others under the same Team Name to compete together as a Squad!
+                  <p className="text-[10px] text-slate-400 font-mono leading-relaxed">
+                    💡 <span className="text-cyan-400 font-bold">Group Creator:</span> Enter a new Group Name to register your squad and get a unique <span className="text-cyan-300 font-bold">Team ID</span>.<br/>
+                    👥 <span className="text-emerald-400 font-bold">Team Members:</span> Enter your squad's <span className="text-emerald-300 font-bold">Team ID</span> (or Group Name) to join!
                   </p>
                 </div>
               )}

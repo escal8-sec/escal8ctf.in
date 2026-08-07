@@ -5,12 +5,13 @@ import {
   Play, Square, RotateCcw, Clock, Activity, UploadCloud, Power,
   Users, UserX, UserCheck, DollarSign, Download, Upload, Megaphone,
   Filter, Search, Award, Lock, Unlock, Pause, PlayCircle, StopCircle,
-  MessageSquare, Mail, User
+  MessageSquare, Mail, User, Radio
 } from "lucide-react";
 import { Challenge, Submission, Category, EventConfig, TeamRecord, SupportTicket } from "../types";
 import SupportChat from "./SupportChat";
 import PublicChatRoom from "./PublicChatRoom";
 import { Escal8Logo } from "./Escal8Logo";
+import { CyberRangeRadar } from "./CyberRangeRadar";
 
 interface AdminPanelProps {
   challenges: Challenge[];
@@ -28,7 +29,7 @@ export default function AdminPanel({
   onInstanceAction
 }: AdminPanelProps) {
   // Main Sub-Tab State
-  const [adminTab, setAdminTab] = useState<"challenges" | "event" | "teams" | "users" | "telemetry" | "support" | "public_chat" | "writeups" | "audit" | "backup">("challenges");
+  const [adminTab, setAdminTab] = useState<"challenges" | "event" | "teams" | "users" | "telemetry" | "support" | "public_chat" | "writeups" | "audit" | "backup" | "cyber_range">("challenges");
   
   // Users & Bans Directory State
   const [users, setUsers] = useState<any[]>([]);
@@ -81,11 +82,19 @@ export default function AdminPanel({
   const [resetConfirming, setResetConfirming] = useState(false);
   const [resetSuccess, setResetSuccess] = useState("");
 
+  const getAuthHeaders = () => {
+    const adminToken = localStorage.getItem("escal8_admin_token");
+    return {
+      "Content-Type": "application/json",
+      ...(adminToken ? { "x-admin-token": adminToken } : {})
+    };
+  };
+
   const handleResetPlatform = async () => {
     try {
       const res = await fetch("/api/admin/reset-platform", {
         method: "POST",
-        headers: { "Content-Type": "application/json" }
+        headers: getAuthHeaders()
       });
       if (res.ok) {
         setResetSuccess("Platform successfully reset to fresh state! All test data removed.");
@@ -117,7 +126,7 @@ export default function AdminPanel({
 
   const fetchUsers = async () => {
     try {
-      const res = await fetch("/api/admin/users");
+      const res = await fetch("/api/admin/users", { headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         setUsers(data);
@@ -131,7 +140,7 @@ export default function AdminPanel({
     try {
       const res = await fetch("/api/admin/users/action", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           username: userObj.username,
           email: userObj.email,
@@ -160,7 +169,7 @@ export default function AdminPanel({
     try {
       const res = await fetch("/api/admin/users/action", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           username: userObj.username,
           email: userObj.email,
@@ -182,13 +191,35 @@ export default function AdminPanel({
     }
   };
 
+  const handleClearNonAdminUsers = async () => {
+    if (!window.confirm("Are you sure you want to PURGE ALL non-admin users?\n\nThis will permanently delete all test user accounts while keeping the admin accounts intact.")) {
+      return;
+    }
+    try {
+      const res = await fetch("/api/admin/users/clear-non-admins", {
+        method: "POST",
+        headers: getAuthHeaders()
+      });
+      if (res.ok) {
+        await fetchUsers();
+        await fetchTeams();
+        onRefreshData();
+        alert("All non-admin users have been removed!");
+      } else {
+        alert("Failed to clear non-admin users.");
+      }
+    } catch (err) {
+      console.error("Failed to clear non-admin users:", err);
+    }
+  };
+
   const handleBanIp = async (ipToBan: string, reason?: string) => {
     if (!ipToBan) return;
     if (!window.confirm(`Are you sure you want to BLACKLIST IP address '${ipToBan}'? Access for all devices from this IP will be blocked.`)) return;
     try {
       const res = await fetch("/api/admin/ip/ban", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ ip: ipToBan, reason: reason || "Admin Blacklist Action" })
       });
       if (res.ok) {
@@ -206,7 +237,7 @@ export default function AdminPanel({
     try {
       const res = await fetch("/api/admin/ip/unban", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ ip: ipToUnban })
       });
       if (res.ok) {
@@ -227,7 +258,7 @@ export default function AdminPanel({
     try {
       const res = await fetch("/api/admin/broadcast", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ message: eventConfig.announcement })
       });
       if (res.ok) {
@@ -255,7 +286,7 @@ export default function AdminPanel({
 
   const fetchAuditLogs = async () => {
     try {
-      const res = await fetch("/api/admin/audit-logs");
+      const res = await fetch("/api/admin/audit-logs", { headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         setAuditLogs(data);
@@ -294,7 +325,7 @@ export default function AdminPanel({
 
   const fetchTeams = async () => {
     try {
-      const res = await fetch("/api/admin/teams");
+      const res = await fetch("/api/admin/teams", { headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         setTeams(data);
@@ -340,7 +371,10 @@ export default function AdminPanel({
     if (!window.confirm("Are you sure you want to delete this challenge? This is irreversible.")) return;
 
     try {
-      const res = await fetch(`/api/challenges/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/challenges/${id}`, {
+        method: "DELETE",
+        headers: getAuthHeaders()
+      });
       if (res.ok) {
         onRefreshData();
       }
@@ -351,7 +385,10 @@ export default function AdminPanel({
 
   const handleToggleSingleDown = async (id: string) => {
     try {
-      const res = await fetch(`/api/admin/challenges/${id}/toggle`, { method: "POST" });
+      const res = await fetch(`/api/admin/challenges/${id}/toggle`, {
+        method: "POST",
+        headers: getAuthHeaders()
+      });
       if (res.ok) {
         onRefreshData();
       }
@@ -365,7 +402,7 @@ export default function AdminPanel({
     try {
       const res = await fetch("/api/admin/challenges/bulk-status", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ status })
       });
       if (res.ok) {
@@ -394,7 +431,7 @@ export default function AdminPanel({
     try {
       const response = await fetch("/api/challenges", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify(editingChallenge)
       });
       const data = await response.json();
@@ -422,7 +459,7 @@ export default function AdminPanel({
     try {
       const res = await fetch("/api/admin/event/config", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify(updated)
       });
       if (res.ok) {
@@ -440,7 +477,7 @@ export default function AdminPanel({
     try {
       const res = await fetch("/api/admin/teams/action", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ teamName, action, pointsDelta, reason })
       });
       if (res.ok) {
@@ -464,7 +501,7 @@ export default function AdminPanel({
         const parsed = JSON.parse(event.target?.result as string || "{}");
         const res = await fetch("/api/admin/import", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: getAuthHeaders(),
           body: JSON.stringify(parsed)
         });
         if (res.ok) {
@@ -507,7 +544,7 @@ export default function AdminPanel({
     try {
       const res = await fetch(`/api/admin/writeups/${id}/review`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           status,
           adminComment: reviewComment,
@@ -726,6 +763,18 @@ export default function AdminPanel({
         >
           <History className="w-4 h-4 text-rose-400" />
           <span>Activity Audit Trail ({auditLogs.length})</span>
+        </button>
+
+        <button
+          onClick={() => setAdminTab("cyber_range")}
+          className={`px-4 py-2.5 rounded-lg text-xs font-mono font-bold flex items-center gap-2 cursor-pointer transition-all ${
+            adminTab === "cyber_range"
+              ? "bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-lg shadow-rose-950/40"
+              : "text-slate-400 hover:text-white"
+          }`}
+        >
+          <Radio className="w-4 h-4 text-rose-400 animate-pulse" />
+          <span>Incident Command & Threat Radar</span>
         </button>
 
         <button
@@ -1025,10 +1074,10 @@ export default function AdminPanel({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 font-mono text-xs">
-                {filteredChallenges.map(chal => {
+                {filteredChallenges.map((chal, idx) => {
                   const isDown = chal.isDown;
                   return (
-                    <tr key={chal.id} className="hover:bg-slate-900/40 transition-colors">
+                    <tr key={`${chal.id}_${idx}`} className="hover:bg-slate-900/40 transition-colors">
                       <td className="p-3">
                         {isDown ? (
                           <span className="inline-flex items-center gap-1 bg-amber-950/80 border border-amber-500/50 text-amber-400 text-[10px] px-2 py-0.5 rounded font-bold">
@@ -1369,8 +1418,8 @@ export default function AdminPanel({
               <thead>
                 <tr className="border-b border-slate-800 bg-slate-900/60 font-mono text-[11px] text-slate-400 uppercase">
                   <th className="p-3">Status</th>
-                  <th className="p-3">Team Name</th>
-                  <th className="p-3">Members</th>
+                  <th className="p-3">Team Name & Team ID</th>
+                  <th className="p-3">Members & User IDs</th>
                   <th className="p-3">Total Score</th>
                   <th className="p-3">Solved Count</th>
                   <th className="p-3 text-right">Moderation Actions</th>
@@ -1384,12 +1433,12 @@ export default function AdminPanel({
                     </td>
                   </tr>
                 ) : (
-                  teams.map((t) => {
+                  teams.map((t, idx) => {
                     const isBanned = t.status === "banned";
                     const isDisqualified = t.status === "disqualified";
 
                     return (
-                      <tr key={t.teamName} className="hover:bg-slate-900/40 transition-colors">
+                      <tr key={t.teamId || `team_${t.teamName}_${idx}`} className="hover:bg-slate-900/40 transition-colors">
                         <td className="p-3">
                           {isBanned && (
                             <span className="bg-rose-950 text-rose-400 border border-rose-800/60 px-2 py-0.5 rounded text-[10px] font-bold">
@@ -1407,9 +1456,31 @@ export default function AdminPanel({
                             </span>
                           )}
                         </td>
-                        <td className="p-3 font-bold text-white uppercase">{t.teamName}</td>
+                        <td className="p-3">
+                          <div className="font-bold text-white uppercase">{t.teamName}</div>
+                          {t.teamId && (
+                            <div className="text-[10px] text-cyan-400 font-mono bg-cyan-950/70 border border-cyan-800/50 px-1.5 py-0.5 rounded w-fit mt-1">
+                              TEAM ID: <span className="font-bold text-cyan-200">{t.teamId}</span>
+                            </div>
+                          )}
+                        </td>
                         <td className="p-3 text-slate-300">
-                          {t.members && t.members.length > 0 ? t.members.join(", ") : "Single Operator"}
+                          {t.memberDetails && t.memberDetails.length > 0 ? (
+                            <div className="space-y-1">
+                              {t.memberDetails.map(m => (
+                                <div key={m.id} className="text-[11px] flex items-center gap-1.5">
+                                  <span className="font-bold text-slate-200">@{m.username}</span>
+                                  <span className="text-[9px] text-slate-400 font-mono bg-slate-900 px-1 py-0.2 rounded border border-slate-800">
+                                    ID: {m.id}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : t.members && t.members.length > 0 ? (
+                            t.members.join(", ")
+                          ) : (
+                            "Single Operator"
+                          )}
                         </td>
                         <td className="p-3 font-bold text-emerald-400">{t.score} PTS</td>
                         <td className="p-3 text-slate-400">{t.solvedChallenges?.length || 0}</td>
@@ -1484,6 +1555,14 @@ export default function AdminPanel({
               >
                 Refresh List
               </button>
+              <button
+                onClick={handleClearNonAdminUsers}
+                className="px-3 py-1.5 bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 text-xs font-mono rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                title="Remove all non-admin test users"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                <span>Purge Non-Admin Users</span>
+              </button>
             </div>
           </div>
 
@@ -1527,14 +1606,14 @@ export default function AdminPanel({
                     );
                   }
 
-                  return filteredUsers.map((u) => {
+                  return filteredUsers.map((u, idx) => {
                     const isBanned = u.status === "banned";
                     const isAdminUser = u.isAdmin || u.username === "escal8" || u.username === "admin";
                     const userIp = u.lastIp || "127.0.0.1";
                     const sharedCount = ipCounts[userIp] || 0;
 
                     return (
-                      <tr key={u.username} className="hover:bg-slate-900/40 transition-colors">
+                      <tr key={u.id || `user_${u.username}_${idx}`} className="hover:bg-slate-900/40 transition-colors">
                         <td className="p-3">
                           {isBanned ? (
                             <span className="bg-rose-950 text-rose-400 border border-rose-800/60 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 w-fit">
@@ -1548,13 +1627,20 @@ export default function AdminPanel({
                             </span>
                           )}
                         </td>
-                        <td className="p-3 font-bold text-white uppercase flex items-center gap-1.5">
-                          <User className="w-3.5 h-3.5 text-cyan-400" />
-                          <span>{u.username}</span>
-                          {isAdminUser && (
-                            <span className="bg-cyan-950 text-cyan-300 border border-cyan-800/40 text-[9px] px-1.5 py-0.5 rounded uppercase">
-                              ADMIN
-                            </span>
+                        <td className="p-3">
+                          <div className="font-bold text-white uppercase flex items-center gap-1.5">
+                            <User className="w-3.5 h-3.5 text-cyan-400" />
+                            <span>{u.username}</span>
+                            {isAdminUser && (
+                              <span className="bg-cyan-950 text-cyan-300 border border-cyan-800/40 text-[9px] px-1.5 py-0.5 rounded uppercase">
+                                ADMIN
+                              </span>
+                            )}
+                          </div>
+                          {u.id && (
+                            <div className="text-[10px] text-emerald-400 font-mono bg-emerald-950/60 border border-emerald-800/40 px-1.5 py-0.5 rounded w-fit mt-1">
+                              USER ID: <span className="font-bold text-emerald-200">{u.id}</span>
+                            </div>
                           )}
                         </td>
                         <td className="p-3 text-slate-300">
@@ -1593,13 +1679,27 @@ export default function AdminPanel({
                         </td>
                         <td className="p-3">
                           {u.isGroup ? (
-                            <span className="bg-purple-950/80 text-purple-300 border border-purple-800/40 px-2 py-0.5 rounded text-[10px] uppercase font-bold">
-                              GROUP / SQUAD ({u.teamName})
-                            </span>
+                            <div>
+                              <span className="bg-purple-950/80 text-purple-300 border border-purple-800/40 px-2 py-0.5 rounded text-[10px] uppercase font-bold">
+                                GROUP / SQUAD ({u.teamName})
+                              </span>
+                              {u.teamId && (
+                                <div className="text-[10px] text-cyan-400 font-mono bg-cyan-950/60 border border-cyan-800/40 px-1.5 py-0.5 rounded w-fit mt-1">
+                                  TEAM ID: <span className="font-bold text-cyan-200">{u.teamId}</span>
+                                </div>
+                              )}
+                            </div>
                           ) : (
-                            <span className="bg-blue-950/80 text-blue-300 border border-blue-800/40 px-2 py-0.5 rounded text-[10px] uppercase font-bold">
-                              INDIVIDUAL / SOLO
-                            </span>
+                            <div>
+                              <span className="bg-blue-950/80 text-blue-300 border border-blue-800/40 px-2 py-0.5 rounded text-[10px] uppercase font-bold">
+                                INDIVIDUAL / SOLO
+                              </span>
+                              {u.teamId && (
+                                <div className="text-[10px] text-slate-400 font-mono bg-slate-950/60 border border-slate-800/40 px-1.5 py-0.5 rounded w-fit mt-1">
+                                  ID: <span className="font-mono text-slate-300">{u.teamId}</span>
+                                </div>
+                              )}
+                            </div>
                           )}
                         </td>
                         <td className="p-3 text-slate-400 text-[11px]">
@@ -1790,13 +1890,13 @@ export default function AdminPanel({
                 </div>
               ) : (
                 <div className="space-y-2 max-h-[440px] overflow-y-auto pr-1">
-                  {supportTickets.map((t) => {
+                  {supportTickets.map((t, idx) => {
                     const isSelected = selectedChatTeam.toLowerCase() === t.teamName.toLowerCase();
                     const lastMsg = t.messages[t.messages.length - 1];
 
                     return (
                       <button
-                        key={t.teamName}
+                        key={t.teamId || `ticket_${t.teamName}_${idx}`}
                         onClick={() => setSelectedChatTeam(t.teamName)}
                         className={`w-full p-3 rounded-lg text-left transition-all cursor-pointer border ${
                           isSelected
@@ -2123,6 +2223,20 @@ export default function AdminPanel({
             </div>
           </div>
         </div>
+      )}
+
+      {/* TAB 11: CYBER RANGE INCIDENT COMMAND RADAR */}
+      {adminTab === "cyber_range" && (
+        <CyberRangeRadar
+          submissions={submissions}
+          challenges={challenges}
+          eventConfig={eventConfig}
+          onToggleEventStatus={(newStatus) => handleSaveEventConfig(newStatus)}
+          onSendAnnouncement={(msg) => {
+            setEventConfig((prev) => ({ ...prev, announcement: msg }));
+            handleSaveEventConfig();
+          }}
+        />
       )}
 
     </div>

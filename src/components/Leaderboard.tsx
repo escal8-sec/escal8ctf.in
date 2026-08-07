@@ -131,9 +131,13 @@ export default function Leaderboard({
                 const displayName = isTeamRow ? teamItem.teamName : userItem.username;
                 const displayTeam = !isTeamRow ? userItem.teamName : null;
 
+                const rowKey = isTeamRow
+                  ? (teamItem.teamId ? `team_${teamItem.teamId}` : `team_${teamItem.teamName}_${idx}`)
+                  : (userItem.id ? `user_${userItem.id}` : `user_${userItem.username}_${idx}`);
+
                 return (
                   <tr 
-                    key={displayName} 
+                    key={rowKey} 
                     className={`transition-colors duration-150 text-sm ${rowBg}`}
                   >
                     {/* Rank */}

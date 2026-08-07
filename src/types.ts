@@ -51,11 +51,13 @@ export interface Submission {
 }
 
 export interface User {
+  id?: string; // Unique Participant / Operator ID (e.g. USR-9A821)
   username: string;
   email?: string; // Gmail / Email address
   passwordHash: string; // stored securely or plaintext in this sandbox env
   isAdmin: boolean;
   teamName?: string;
+  teamId?: string; // Unique Team / Group ID (e.g. TEAM-7K93)
   isGroup?: boolean; // false for Individual, true for Group/Squad
   status?: 'active' | 'banned';
   lastLoginTime?: string;
@@ -66,8 +68,10 @@ export interface User {
 
 
 export interface UserScore {
+  id?: string;
   username: string;
   teamName?: string;
+  teamId?: string;
   score: number;
   solvedChallenges: string[]; // Challenge IDs
   lastSolvedTime: string; // ISO String
@@ -75,6 +79,7 @@ export interface UserScore {
 
 export interface TeamScore {
   teamName: string;
+  teamId?: string;
   score: number;
   solvedChallenges: string[]; // Challenge IDs (unique across team)
   members: string[]; // Usernames of members
@@ -109,6 +114,8 @@ export interface WriteupSubmission {
 
 export interface TeamRecord {
   teamName: string;
+  teamId?: string;
+  creatorUsername?: string;
   members: string[];
   score: number;
   solvedChallenges: string[];

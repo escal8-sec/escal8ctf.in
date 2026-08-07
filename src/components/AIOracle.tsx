@@ -17,10 +17,17 @@ interface AIOracleProps {
   onClose?: () => void;
   username?: string;
   teamName?: string;
+  initialTab?: "ai" | "admin" | "public";
 }
 
-export default function AIOracle({ challenges, activeChallenge, onClose, username = "Operator", teamName = "INDIVIDUAL" }: AIOracleProps) {
-  const [activeTab, setActiveTab] = useState<"ai" | "admin" | "public">("ai");
+export default function AIOracle({ challenges, activeChallenge, onClose, username = "Operator", teamName = "INDIVIDUAL", initialTab = "ai" }: AIOracleProps) {
+  const [activeTab, setActiveTab] = useState<"ai" | "admin" | "public">(initialTab);
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
   const [selectedChallengeId, setSelectedChallengeId] = useState<string>("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -276,8 +283,8 @@ export default function AIOracle({ challenges, activeChallenge, onClose, usernam
                 className="flex-1 sm:w-60 bg-cyber-bg border border-slate-800 text-xs text-slate-200 p-2 rounded focus:outline-none focus:border-cyan-500 font-mono"
               >
                 <option value="">-- General Security Concepts --</option>
-                {challenges.map(c => (
-                  <option key={c.id} value={c.id}>
+                {challenges.map((c, idx) => (
+                  <option key={`${c.id}_${idx}`} value={c.id}>
                     [{c.category.toUpperCase()}] {c.title} ({c.points} pts)
                   </option>
                 ))}
